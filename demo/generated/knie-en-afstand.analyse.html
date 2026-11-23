@@ -1,0 +1,1005 @@
+<!doctype html>
+<html lang="nl-BE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knie en afstand</title>
+<style>
+:root {
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --text: #1c1d1f;
+  --muted: #5c6066;
+  --border: #d9dbde;
+  --grid: #e6e8eb;
+  --axis: #8a8f96;
+  --point: #1f5fbf;
+  --point-stroke: #ffffff;
+  --unscored: #6b7078;
+  --trend: #b4541a;
+  --accent: #1f5fbf;
+  --accent-soft: #e5eefb;
+  --error: #b3261e;
+  --error-soft: #fdecea;
+  --ok: #1d7a3a;
+  --bar: #9bb8e6;
+  --focus: #e0a100;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141517;
+    --surface: #1d1f22;
+    --text: #e9eaec;
+    --muted: #a3a8af;
+    --border: #363a40;
+    --grid: #2b2e33;
+    --axis: #7d838b;
+    --point: #7fb0ff;
+    --point-stroke: #1d1f22;
+    --unscored: #a3a8af;
+    --trend: #f0a36b;
+    --accent: #8ab8ff;
+    --accent-soft: #23324a;
+    --error: #ff8a80;
+    --error-soft: #3a1f1d;
+    --ok: #7ad69a;
+    --bar: #3c5f94;
+    --focus: #ffcc4d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow-x: hidden;
+}
+main { max-width: 1080px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 1.45rem; margin: 4px 0 2px; }
+h2 { font-size: 1.1rem; margin: 0 0 8px; }
+p { margin: 0 0 8px; }
+.lede { color: var(--muted); margin-bottom: 16px; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+  min-width: 0;
+}
+.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 16px; }
+@media (min-width: 900px) {
+  .grid { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); align-items: start; }
+}
+.muted { color: var(--muted); }
+.small { font-size: 0.86rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: end; margin-bottom: 8px; }
+.controls label { display: flex; flex-direction: column; font-size: 0.86rem; color: var(--muted); gap: 2px; }
+select, input[type="text"] {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+button {
+  font: inherit;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* Chart */
+.chart-wrap { position: relative; width: 100%; }
+.chart-wrap svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart-wrap svg text { fill: var(--muted); font-size: 12px; font-family: inherit; }
+.chart-wrap svg .axis-title { fill: var(--text); font-size: 12.5px; }
+.gridline { stroke: var(--grid); stroke-width: 1; }
+.axisline { stroke: var(--axis); stroke-width: 1; }
+.pt { cursor: pointer; outline: none; }
+.pt .mark-scored { fill: var(--point); stroke: var(--point-stroke); stroke-width: 1.5; }
+.pt .mark-unscored { fill: var(--surface); stroke: var(--unscored); stroke-width: 1.75; stroke-dasharray: 3 2; }
+.pt .count { fill: var(--text); font-size: 11px; font-weight: 600; }
+.pt .halo { fill: none; stroke: transparent; stroke-width: 3; }
+.pt:hover .halo, .pt:focus .halo, .pt.selected .halo { stroke: var(--focus); }
+.trend { stroke: var(--trend); stroke-width: 2; stroke-dasharray: 6 4; fill: none; }
+.strip-bg { fill: var(--bg); }
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--text);
+  color: var(--bg);
+  border-radius: 6px;
+  padding: 6px 9px;
+  font-size: 0.84rem;
+  line-height: 1.35;
+  max-width: 240px;
+  z-index: 5;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+}
+.tooltip[hidden] { display: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 0.86rem; color: var(--muted); }
+.legend li { display: flex; align-items: center; gap: 6px; }
+.legend svg { flex: none; }
+.reading {
+  border-left: 4px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 10px 12px;
+  border-radius: 0 6px 6px 0;
+  margin-top: 12px;
+}
+.reading p:last-child { margin-bottom: 0; }
+.selection { margin-top: 10px; font-size: 0.9rem; }
+.selection ul { margin: 4px 0 0; padding-left: 18px; }
+.selection li { margin-bottom: 4px; }
+.selection button { margin-left: 6px; font-size: 0.84rem; padding: 1px 8px; }
+
+/* Summary */
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+caption { text-align: left; font-weight: 600; margin-bottom: 6px; }
+th, td { padding: 6px 6px; border-bottom: 1px solid var(--border); text-align: right; vertical-align: middle; }
+th:first-child, td:first-child { text-align: left; }
+thead th { font-size: 0.82rem; color: var(--muted); font-weight: 600; }
+tfoot td { font-weight: 600; border-bottom: none; border-top: 2px solid var(--border); }
+.barcell { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.bar { height: 8px; background: var(--bar); border-radius: 2px; min-width: 0; }
+.bartrack { width: 52px; flex: none; display: flex; justify-content: flex-start; }
+
+/* List */
+.runs { list-style: none; margin: 0; padding: 0; }
+.run {
+  border-top: 1px solid var(--border);
+  padding: 12px 4px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  scroll-margin-top: 16px;
+}
+.run:first-child { border-top: none; }
+.run.highlight { background: var(--accent-soft); border-radius: 6px; }
+@media (min-width: 620px) {
+  .run { grid-template-columns: minmax(0, 1fr) 220px; align-items: start; }
+}
+.run-head { font-weight: 600; }
+.run-head .dist { font-variant-numeric: tabular-nums; }
+.run-note { color: var(--muted); font-size: 0.9rem; overflow-wrap: anywhere; }
+.run-note-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: .03em; }
+.pain label { display: block; font-size: 0.86rem; font-weight: 600; }
+.pain input { width: 6.5em; }
+.pain input[aria-invalid="true"] { border-color: var(--error); border-width: 2px; }
+.pain input:disabled { opacity: .6; }
+.hint { font-size: 0.8rem; color: var(--muted); }
+.status { font-size: 0.82rem; min-height: 1.2em; }
+.status.ok { color: var(--ok); }
+.errors { color: var(--error); background: var(--error-soft); border-radius: 6px; padding: 6px 8px; font-size: 0.85rem; margin-top: 4px; }
+.errors[hidden] { display: none; }
+.errors p { margin: 0 0 4px; }
+.errors p:last-child { margin: 0; }
+.errors .repair { color: var(--text); }
+.badge-none { display: inline-block; font-size: 0.78rem; border: 1px dashed var(--unscored); color: var(--muted); border-radius: 10px; padding: 0 7px; margin-left: 6px; font-weight: 400; }
+.empty { color: var(--muted); padding: 12px 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="title">Knie en afstand</h1>
+    <p class="lede" id="intent"></p>
+  </header>
+
+  <div class="grid">
+    <section class="card" aria-labelledby="chart-h">
+      <h2 id="chart-h">Afstand tegenover kniepijn, per run</h2>
+      <div class="controls">
+        <label>Periode in grafiek
+          <select id="period">
+            <option value="all">Alle runs</option>
+            <option value="30">Laatste 30 dagen</option>
+            <option value="90">Laatste 90 dagen</option>
+          </select>
+        </label>
+      </div>
+      <div class="chart-wrap" id="chart-wrap">
+        <div id="chart" role="group" aria-labelledby="chart-h" aria-describedby="chart-desc"></div>
+        <div class="tooltip" id="tooltip" role="status" hidden></div>
+      </div>
+      <p class="sr-only" id="chart-desc">Spreidingsdiagram. Horizontaal de afstand in kilometer, verticaal de kniepijn van 0 tot 10. Elk punt is een run; gebruik Tab om de punten te doorlopen. Runs zonder pijnscore staan apart in een strook onder de grafiek.</p>
+      <ul class="legend" id="legend" aria-label="Legende"></ul>
+      <div class="selection" id="selection" aria-live="polite"></div>
+      <div class="reading" id="reading" aria-live="polite"></div>
+    </section>
+
+    <section class="card" aria-labelledby="sum-h">
+      <h2 id="sum-h">Samenvatting</h2>
+      <div id="summary"></div>
+    </section>
+  </div>
+
+  <section class="card" aria-labelledby="list-h">
+    <h2 id="list-h">Pijnscore per run</h2>
+    <p class="muted small" id="list-intro"></p>
+    <div class="controls">
+      <label>Sorteren
+        <select id="sort">
+          <option value="contract">Afstand, langste eerst</option>
+          <option value="date">Datum, nieuwste eerst</option>
+          <option value="unscored">Zonder score eerst</option>
+        </select>
+      </label>
+    </div>
+    <p class="empty" id="list-empty" hidden></p>
+    <ol class="runs" id="runs"></ol>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var surface = window.surface;
+  var contract = (surface && surface.contract) || {};
+  var LOCALE = "nl-BE";
+
+  // ---------- Contract lookups ----------
+  function fieldByName(name) {
+    var fs = contract.fields || [];
+    for (var i = 0; i < fs.length; i++) if (fs[i].name === name) return fs[i];
+    return null;
+  }
+  function actionByName(name) {
+    var as = contract.actions || [];
+    for (var i = 0; i < as.length; i++) if (as[i].name === name) return as[i];
+    return null;
+  }
+  var F_DATE = fieldByName("date") || { name: "date", label: "Datum" };
+  var F_DIST = fieldByName("distance_km") || { name: "distance_km", label: "Afstand", unit: "km" };
+  var F_PAIN = fieldByName("knee_pain") || { name: "knee_pain", label: "Kniepijn", min: 0, max: 10 };
+  var F_NOTE = fieldByName("note") || { name: "note", label: "Notitie" };
+  var EDIT = actionByName("$edit");
+  var EDIT_PAIN = null;
+  if (EDIT && EDIT.params) {
+    for (var pi = 0; pi < EDIT.params.length; pi++) if (EDIT.params[pi].name === F_PAIN.name) EDIT_PAIN = EDIT.params[pi];
+  }
+  var PAIN_MIN = isNum((EDIT_PAIN || F_PAIN).min) ? (EDIT_PAIN || F_PAIN).min : 0;
+  var PAIN_MAX = isNum((EDIT_PAIN || F_PAIN).max) ? (EDIT_PAIN || F_PAIN).max : 10;
+  var DIST_UNIT = F_DIST.unit || "km";
+  var MEASURES = (contract.summary && contract.summary.measures) || [];
+
+  // ---------- Formatting ----------
+  var fmt1 = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 });
+  var fmt2 = new Intl.NumberFormat(LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var fmtInt = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 });
+  var fmtDateLong = new Intl.DateTimeFormat(LOCALE, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+
+  function isNum(v) { return typeof v === "number" && isFinite(v); }
+  function parseDate(s) {
+    if (typeof s !== "string") return null;
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (!m) return null;
+    var d = new Date(+m[1], +m[2] - 1, +m[3]);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  function fDate(s) { var d = parseDate(s); return d ? fmtDateLong.format(d) : (s == null ? "datum onbekend" : String(s)); }
+  function fDist(v) { return isNum(v) ? fmt1.format(v) + " " + DIST_UNIT : "afstand onbekend"; }
+  function fPain(v) { return isNum(v) ? fmt1.format(v) : "geen score"; }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, text) {
+    var e = document.createElementNS(SVGNS, tag);
+    if (attrs) for (var k in attrs) if (Object.prototype.hasOwnProperty.call(attrs, k)) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  // ---------- Static text ----------
+  document.getElementById("title").textContent = contract.label || "Knie en afstand";
+  document.title = contract.label || "Knie en afstand";
+  document.getElementById("intent").textContent = contract.intent || "";
+  document.getElementById("list-intro").textContent =
+    (F_PAIN.description || "Kniepijn na de run") +
+    ". Pas een score aan en verlaat het veld (of druk op Enter) om op te slaan. Maak het veld leeg om de score te wissen: dan telt de run als ‘geen score’, niet als 0.";
+
+  // ---------- State ----------
+  var data = { total: 0, rows: [], summary: null };
+  var loaded = false;
+  var rowState = {};      // id -> { dirty, draft, pending, error, okUntil }
+  var rowEls = {};        // id -> { li, ... }
+  var idSeq = 0;
+  var selectedKey = null; // chart point key
+  var pendingReorder = false;
+
+  function st(id) {
+    if (!rowState[id]) rowState[id] = { dirty: false, draft: "", pending: false, error: null, ok: false };
+    return rowState[id];
+  }
+
+  // ---------- Chart ----------
+  var chartEl = document.getElementById("chart");
+  var wrapEl = document.getElementById("chart-wrap");
+  var tipEl = document.getElementById("tooltip");
+  var periodEl = document.getElementById("period");
+
+  function inPeriod(row) {
+    var p = periodEl.value;
+    if (p === "all") return true;
+    var d = parseDate(row.values && row.values[F_DATE.name]);
+    if (!d) return false;
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var days = (today - d) / 86400000;
+    return days >= 0 && days <= Number(p);
+  }
+
+  function niceMax(v) {
+    if (!(v > 0)) return 10;
+    var steps = [1, 2, 2.5, 5, 10];
+    var pow = Math.pow(10, Math.floor(Math.log10(v)));
+    for (var i = 0; i < steps.length; i++) if (steps[i] * pow >= v) return steps[i] * pow;
+    return 10 * pow;
+  }
+  function tickStep(max, target) {
+    var raw = max / target;
+    var pow = Math.pow(10, Math.floor(Math.log10(raw)));
+    var c = [1, 2, 2.5, 5, 10];
+    for (var i = 0; i < c.length; i++) if (c[i] * pow >= raw) return c[i] * pow;
+    return 10 * pow;
+  }
+
+  function stats(pts) {
+    var n = pts.length;
+    if (n < 2) return { n: n, r: null, sx: 0, sy: 0 };
+    var mx = 0, my = 0;
+    pts.forEach(function (p) { mx += p.x; my += p.y; });
+    mx /= n; my /= n;
+    var sxx = 0, syy = 0, sxy = 0;
+    pts.forEach(function (p) { sxx += (p.x - mx) * (p.x - mx); syy += (p.y - my) * (p.y - my); sxy += (p.x - mx) * (p.y - my); });
+    var r = (sxx > 1e-12 && syy > 1e-12) ? sxy / Math.sqrt(sxx * syy) : null;
+    var slope = sxx > 1e-12 ? sxy / sxx : null;
+    return { n: n, r: r, sxx: sxx, syy: syy, slope: slope, intercept: slope == null ? null : my - slope * mx, mx: mx, my: my };
+  }
+
+  function groupPoints(rows) {
+    var scored = {}, unscored = {}, order = [];
+    rows.forEach(function (row) {
+      var v = row.values || {};
+      var x = v[F_DIST.name];
+      if (!isNum(x)) return; // cannot place a run without distance
+      var y = v[F_PAIN.name];
+      var key, bucket;
+      if (isNum(y)) { key = "s|" + x + "|" + y; bucket = scored; }
+      else { key = "u|" + x; bucket = unscored; }
+      if (!bucket[key]) { bucket[key] = { key: key, x: x, y: isNum(y) ? y : null, rows: [] }; order.push(bucket[key]); }
+      bucket[key].rows.push(row);
+    });
+    return {
+      scored: order.filter(function (g) { return g.y != null; }),
+      unscored: order.filter(function (g) { return g.y == null; })
+    };
+  }
+
+  function describeGroup(g) {
+    var lines = g.rows.map(function (r) {
+      return fDate(r.values[F_DATE.name]) + ", " + fDist(r.values[F_DIST.name]) + ", " + F_PAIN.label.toLowerCase() + ": " + fPain(r.values[F_PAIN.name]);
+    });
+    return lines;
+  }
+
+  function renderChart() {
+    var activeKey = (document.activeElement && document.activeElement.getAttribute && document.activeElement.getAttribute("data-key")) || null;
+    chartEl.textContent = "";
+    hideTip();
+
+    var rows = (data.rows || []).filter(inPeriod);
+    var groups = groupPoints(rows);
+    var scoredPts = [];
+    groups.scored.forEach(function (g) { g.rows.forEach(function () { scoredPts.push({ x: g.x, y: g.y }); }); });
+    var unscoredCount = 0;
+    groups.unscored.forEach(function (g) { unscoredCount += g.rows.length; });
+    var noDistance = rows.filter(function (r) { return !isNum(r.values && r.values[F_DIST.name]); }).length;
+
+    var W = Math.max(300, Math.floor(wrapEl.clientWidth || 600));
+    var narrow = W < 480;
+    var m = { l: 40, r: 14, t: 14, b: 44 };
+    var plotH = narrow ? 210 : 260;
+    var stripH = groups.unscored.length ? 46 : 0;
+    var H = m.t + plotH + m.b + stripH;
+    var pw = W - m.l - m.r;
+
+    var allX = [];
+    groups.scored.concat(groups.unscored).forEach(function (g) { allX.push(g.x); });
+    var xMaxData = allX.length ? Math.max.apply(null, allX) : 0;
+    var xMax = niceMax(xMaxData * 1.05 || 10);
+    var xStep = tickStep(xMax, narrow ? 4 : 6);
+    function X(v) { return m.l + (v / xMax) * pw; }
+    function Y(v) { return m.t + plotH - ((v - PAIN_MIN) / (PAIN_MAX - PAIN_MIN)) * plotH; }
+
+    var svg = sv("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, "aria-hidden": "false", focusable: "false" });
+
+    // grid + y axis
+    var yStep = (PAIN_MAX - PAIN_MIN) > 5 ? 2 : 1;
+    for (var yv = PAIN_MIN; yv <= PAIN_MAX + 1e-9; yv += yStep) {
+      svg.appendChild(sv("line", { "class": "gridline", x1: m.l, x2: W - m.r, y1: Y(yv), y2: Y(yv) }));
+      svg.appendChild(sv("text", { x: m.l - 8, y: Y(yv) + 4, "text-anchor": "end", "aria-hidden": "true" }, fmtInt.format(yv)));
+    }
+    for (var xv = 0; xv <= xMax + 1e-9; xv += xStep) {
+      svg.appendChild(sv("line", { "class": "gridline", x1: X(xv), x2: X(xv), y1: m.t, y2: m.t + plotH }));
+      svg.appendChild(sv("text", { x: X(xv), y: m.t + plotH + 16, "text-anchor": "middle", "aria-hidden": "true" }, fmt1.format(xv)));
+    }
+    svg.appendChild(sv("line", { "class": "axisline", x1: m.l, x2: W - m.r, y1: m.t + plotH, y2: m.t + plotH }));
+    svg.appendChild(sv("line", { "class": "axisline", x1: m.l, x2: m.l, y1: m.t, y2: m.t + plotH }));
+    svg.appendChild(sv("text", { "class": "axis-title", x: m.l + pw / 2, y: m.t + plotH + 36, "text-anchor": "middle", "aria-hidden": "true" }, F_DIST.label + " (" + DIST_UNIT + ")"));
+    svg.appendChild(sv("text", { "class": "axis-title", x: 12, y: m.t + plotH / 2, "text-anchor": "middle", transform: "rotate(-90 12 " + (m.t + plotH / 2) + ")", "aria-hidden": "true" }, F_PAIN.label + " (" + fmtInt.format(PAIN_MIN) + "–" + fmtInt.format(PAIN_MAX) + ")"));
+
+    var s = stats(scoredPts);
+    var showTrend = s.n >= 5 && s.r != null && s.slope != null;
+    if (showTrend) {
+      var xs = scoredPts.map(function (p) { return p.x; });
+      var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
+      var clampY = function (v) { return Math.max(PAIN_MIN, Math.min(PAIN_MAX, v)); };
+      svg.appendChild(sv("line", { "class": "trend", x1: X(x0), x2: X(x1), y1: Y(clampY(s.intercept + s.slope * x0)), y2: Y(clampY(s.intercept + s.slope * x1)), "aria-hidden": "true" }));
+    }
+
+    // unscored strip
+    if (groups.unscored.length) {
+      var sy = m.t + plotH + m.b + stripH / 2;
+      svg.appendChild(sv("rect", { "class": "strip-bg", x: m.l, y: sy - 14, width: pw, height: 28, rx: 4 }));
+      svg.appendChild(sv("text", { x: m.l - 6, y: sy + 4, "text-anchor": "end", "aria-hidden": "true" }, "geen"));
+      svg.appendChild(sv("text", { x: m.l + 4, y: sy - 18, "aria-hidden": "true" }, "Runs zonder pijnscore (niet gelijk aan 0)"));
+    }
+
+    var focusables = [];
+    function addPoint(g, cx, cy, scored) {
+      var n = g.rows.length;
+      var grp = sv("g", { "class": "pt" + (selectedKey === g.key ? " selected" : ""), tabindex: "0", role: "button", "data-key": g.key });
+      var label = (n > 1 ? n + " runs op hetzelfde punt: " : "Run: ") + describeGroup(g).join("; ");
+      grp.setAttribute("aria-label", label);
+      var rad = n > 1 ? 7.5 : 6;
+      grp.appendChild(sv("circle", { "class": "halo", cx: cx, cy: cy, r: rad + 4 }));
+      // larger invisible hit target for touch
+      grp.appendChild(sv("circle", { cx: cx, cy: cy, r: 14, fill: "transparent" }));
+      grp.appendChild(sv("circle", { "class": scored ? "mark-scored" : "mark-unscored", cx: cx, cy: cy, r: rad }));
+      if (n > 1) grp.appendChild(sv("text", { "class": "count", x: cx + rad + 3, y: cy - rad + 2, "aria-hidden": "true" }, "×" + n));
+      grp.addEventListener("mouseenter", function () { showTip(g, cx, cy); });
+      grp.addEventListener("mouseleave", function () { if (selectedKey !== g.key) hideTip(); });
+      grp.addEventListener("focus", function () { showTip(g, cx, cy); });
+      grp.addEventListener("blur", function () { hideTip(); });
+      grp.addEventListener("click", function () { select(g, cx, cy); });
+      grp.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(g, cx, cy); }
+        else if (e.key === "Escape") { hideTip(); }
+      });
+      svg.appendChild(grp);
+      focusables.push(grp);
+    }
+    // sort left to right for a sensible tab order
+    groups.scored.slice().sort(function (a, b) { return a.x - b.x || a.y - b.y; }).forEach(function (g) { addPoint(g, X(g.x), Y(g.y), true); });
+    groups.unscored.slice().sort(function (a, b) { return a.x - b.x; }).forEach(function (g) { addPoint(g, X(g.x), m.t + plotH + m.b + stripH / 2, false); });
+
+    if (!rows.length) {
+      svg.appendChild(sv("text", { "class": "axis-title", x: m.l + pw / 2, y: m.t + plotH / 2, "text-anchor": "middle" },
+        loaded ? (periodEl.value === "all" ? "Nog geen runs." : "Geen runs in deze periode.") : "Gegevens laden…"));
+    }
+
+    chartEl.appendChild(svg);
+    if (activeKey) {
+      for (var i = 0; i < focusables.length; i++) if (focusables[i].getAttribute("data-key") === activeKey) { focusables[i].focus(); break; }
+    }
+    renderLegend(showTrend, groups.unscored.length > 0);
+    renderReading(s, unscoredCount, noDistance, rows.length);
+    renderSelection(groups);
+  }
+
+  function showTip(g, cx, cy) {
+    tipEl.textContent = "";
+    if (g.rows.length > 1) tipEl.appendChild(el("div", null, g.rows.length + " runs op dit punt"));
+    g.rows.slice(0, 6).forEach(function (r) {
+      var v = r.values || {};
+      var d = el("div");
+      var b = el("strong", null, fDate(v[F_DATE.name]));
+      d.appendChild(b);
+      d.appendChild(document.createTextNode(" · " + fDist(v[F_DIST.name]) + " · " + F_PAIN.label + ": " + fPain(v[F_PAIN.name])));
+      tipEl.appendChild(d);
+    });
+    if (g.rows.length > 6) tipEl.appendChild(el("div", null, "en nog " + (g.rows.length - 6) + "…"));
+    tipEl.hidden = false;
+    var ww = wrapEl.clientWidth;
+    var tw = tipEl.offsetWidth, th = tipEl.offsetHeight;
+    var svgEl = chartEl.querySelector("svg");
+    var scale = svgEl ? (svgEl.getBoundingClientRect().width / Number(svgEl.getAttribute("width"))) || 1 : 1;
+    var left = cx * scale - tw / 2;
+    left = Math.max(0, Math.min(ww - tw, left));
+    var top = cy * scale - th - 14;
+    if (top < 0) top = cy * scale + 16;
+    tipEl.style.left = left + "px";
+    tipEl.style.top = top + "px";
+  }
+  function hideTip() { tipEl.hidden = true; }
+
+  function select(g, cx, cy) {
+    selectedKey = selectedKey === g.key ? null : g.key;
+    var pts = chartEl.querySelectorAll(".pt");
+    for (var i = 0; i < pts.length; i++) pts[i].classList.toggle("selected", pts[i].getAttribute("data-key") === selectedKey);
+    if (selectedKey) showTip(g, cx, cy); else hideTip();
+    renderSelection(groupPoints((data.rows || []).filter(inPeriod)));
+  }
+
+  function renderSelection(groups) {
+    var box = document.getElementById("selection");
+    box.textContent = "";
+    Object.keys(rowEls).forEach(function (id) { rowEls[id].li.classList.remove("highlight"); });
+    if (!selectedKey) return;
+    var g = null;
+    groups.scored.concat(groups.unscored).forEach(function (x) { if (x.key === selectedKey) g = x; });
+    if (!g) { selectedKey = null; return; }
+    box.appendChild(el("strong", null, g.rows.length > 1 ? "Geselecteerd: " + g.rows.length + " runs" : "Geselecteerd:"));
+    var ul = el("ul");
+    g.rows.forEach(function (r) {
+      var v = r.values || {};
+      var li = el("li", null, fDate(v[F_DATE.name]) + " · " + fDist(v[F_DIST.name]) + " · " + F_PAIN.label + ": " + fPain(v[F_PAIN.name]));
+      var btn = el("button", null, "Pijnscore aanpassen");
+      btn.type = "button";
+      btn.addEventListener("click", function () { goToRow(r.id); });
+      li.appendChild(btn);
+      ul.appendChild(li);
+      if (rowEls[r.id]) rowEls[r.id].li.classList.add("highlight");
+    });
+    box.appendChild(ul);
+  }
+
+  function goToRow(id) {
+    var re = rowEls[id];
+    if (!re) return;
+    re.li.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (!re.input.disabled) re.input.focus({ preventScroll: true });
+  }
+
+  function legendSwatch(kind) {
+    var s = sv("svg", { width: 22, height: 14, viewBox: "0 0 22 14", "aria-hidden": "true" });
+    if (kind === "scored") s.appendChild(sv("circle", { "class": "mark-scored", cx: 11, cy: 7, r: 5.5, style: "fill:var(--point);stroke:var(--point-stroke);stroke-width:1.5" }));
+    if (kind === "unscored") s.appendChild(sv("circle", { cx: 11, cy: 7, r: 5, style: "fill:var(--surface);stroke:var(--unscored);stroke-width:1.75;stroke-dasharray:3 2" }));
+    if (kind === "trend") s.appendChild(sv("line", { x1: 1, x2: 21, y1: 7, y2: 7, style: "stroke:var(--trend);stroke-width:2;stroke-dasharray:6 4" }));
+    return s;
+  }
+  function renderLegend(showTrend, hasUnscored) {
+    var ul = document.getElementById("legend");
+    ul.textContent = "";
+    function item(kind, text) { var li = el("li"); li.appendChild(legendSwatch(kind)); li.appendChild(document.createTextNode(text)); ul.appendChild(li); }
+    item("scored", "Run met pijnscore (gevulde stip; ×n = meerdere runs op hetzelfde punt)");
+    if (hasUnscored) item("unscored", "Run zonder pijnscore (lege, gestippelde stip, aparte strook)");
+    if (showTrend) item("trend", "Trendlijn (indicatief, rechte lijn door de punten)");
+  }
+
+  function renderReading(s, unscored, noDistance, totalInView) {
+    var box = document.getElementById("reading");
+    box.textContent = "";
+    if (!loaded) { box.appendChild(el("p", null, "Gegevens laden…")); return; }
+    var periodTxt = periodEl.value === "all" ? "" : " in deze periode";
+    var main;
+    if (totalInView === 0) {
+      main = "Er zijn" + periodTxt + " geen runs om te vergelijken.";
+    } else if (s.n === 0) {
+      main = "Geen enkele run" + periodTxt + " heeft een pijnscore. Zonder scores valt niets te zeggen over een verband met de afstand.";
+    } else if (s.n < 5) {
+      main = "Pas " + s.n + (s.n === 1 ? " run" : " runs") + " met een pijnscore" + periodTxt + ". Dat is te weinig om een verband tussen afstand en kniepijn te zien; elk patroon kan hier toeval zijn.";
+    } else if (s.sxx <= 1e-12) {
+      main = "Alle runs met een score" + periodTxt + " hebben dezelfde afstand. Daaruit valt niet af te leiden of de afstand ertoe doet.";
+    } else if (s.syy <= 1e-12) {
+      main = "Alle runs met een score" + periodTxt + " hebben dezelfde pijnscore (" + fmt1.format(scoredY(s)) + "), ongeacht de afstand. In deze gegevens is geen verband te zien.";
+    } else {
+      var a = Math.abs(s.r);
+      var dir = s.r > 0 ? "langere runs gaan samen met méér kniepijn" : "langere runs gaan samen met minder kniepijn";
+      if (a < 0.3) main = "In deze " + s.n + " runs" + periodTxt + " is geen duidelijk verband te zien tussen afstand en kniepijn.";
+      else if (a < 0.6) main = "In deze " + s.n + " runs" + periodTxt + " is er een zwakke neiging: " + dir + ".";
+      else main = "In deze " + s.n + " runs" + periodTxt + " is er een duidelijke neiging: " + dir + ".";
+      main += " (Correlatie r = " + fmt2.format(s.r) + ", op een schaal van −1 tot 1.)";
+    }
+    box.appendChild(el("p", null, main));
+    var caveats = [];
+    if (s.n >= 2 && s.n < 15 && totalInView > 0) caveats.push("Met zo weinig runs kan één run het beeld sterk veranderen.");
+    if (s.n >= 5) caveats.push("Een samenhang is geen bewijs dat de afstand de oorzaak is: tempo, ondergrond, schoenen of rust staan niet in deze gegevens.");
+    if (unscored > 0) caveats.push(unscored + (unscored === 1 ? " run heeft" : " runs hebben") + " geen pijnscore en tellen niet mee (niet als 0). Vul ze aan in de lijst hieronder als je ze nog weet.");
+    if (noDistance > 0) caveats.push(noDistance + (noDistance === 1 ? " run heeft" : " runs hebben") + " geen afstand en staan niet in de grafiek.");
+    if (caveats.length) box.appendChild(el("p", "small", caveats.join(" ")));
+  }
+  function scoredY() {
+    for (var i = 0; i < (data.rows || []).length; i++) {
+      var r = data.rows[i];
+      if (inPeriod(r) && isNum(r.values[F_PAIN.name]) && isNum(r.values[F_DIST.name])) return r.values[F_PAIN.name];
+    }
+    return 0;
+  }
+
+  // ---------- Summary ----------
+  function fMeasure(m, v) {
+    if (!isNum(v)) return m.fn === "count" ? "0" : "—";
+    if (m.fn === "count") return fmtInt.format(v);
+    return fmt1.format(v);
+  }
+  function renderSummary() {
+    var box = document.getElementById("summary");
+    box.textContent = "";
+    if (!loaded) { box.appendChild(el("p", "muted", "Gegevens laden…")); return; }
+    var sum = data.summary;
+    if (!sum || !MEASURES.length) { box.appendChild(el("p", "muted", "Geen samenvatting beschikbaar.")); return; }
+    var groups = Array.isArray(sum.groups) ? sum.groups : [];
+    var table = el("table");
+    var byLabel = (contract.summary.by && contract.summary.by.label) || "Groep";
+    table.appendChild(el("caption", null, byLabel));
+    var thead = el("thead"), tr = el("tr");
+    tr.appendChild(el("th", null, byLabel.replace(/^Naar\s+/i, "").replace(/^./, function (c) { return c.toUpperCase(); })));
+    MEASURES.forEach(function (m) { var th = el("th", null, m.label); th.scope = "col"; tr.appendChild(th); });
+    thead.appendChild(tr); table.appendChild(thead);
+
+    var tbody = el("tbody");
+    if (!groups.length) {
+      var etr = el("tr"); var etd = el("td", "muted", "Geen groepen."); etd.colSpan = MEASURES.length + 1; etr.appendChild(etd); tbody.appendChild(etr);
+    }
+    groups.forEach(function (g) {
+      var r = el("tr");
+      var th = el("th", null, g.key == null || g.key === "" ? "(onbekend)" : String(g.key));
+      th.scope = "row"; th.style.textAlign = "left"; th.style.fontWeight = "400";
+      r.appendChild(th);
+      MEASURES.forEach(function (m) {
+        var v = g.values ? g.values[m.name] : null;
+        var td = el("td");
+        if (m.fn === "avg") {
+          var wrapC = el("div", "barcell");
+          wrapC.appendChild(el("span", null, fMeasure(m, v)));
+          var track = el("span", "bartrack");
+          track.setAttribute("aria-hidden", "true");
+          if (isNum(v)) {
+            var bar = el("span", "bar");
+            bar.style.width = Math.max(0, Math.min(1, (v - PAIN_MIN) / (PAIN_MAX - PAIN_MIN))) * 52 + "px";
+            track.appendChild(bar);
+          }
+          wrapC.appendChild(track);
+          td.appendChild(wrapC);
+        } else {
+          td.textContent = fMeasure(m, v);
+        }
+        r.appendChild(td);
+      });
+      tbody.appendChild(r);
+    });
+    table.appendChild(tbody);
+
+    var tfoot = el("tfoot"), fr = el("tr");
+    fr.appendChild(el("td", null, "Alle runs"));
+    MEASURES.forEach(function (m) {
+      var v = sum.values ? sum.values[m.name] : null;
+      var td = el("td");
+      if (m.fn === "avg") {
+        var wrapC = el("div", "barcell");
+        wrapC.appendChild(el("span", null, fMeasure(m, v)));
+        wrapC.appendChild(el("span", "bartrack"));
+        td.appendChild(wrapC);
+      } else td.textContent = fMeasure(m, v);
+      fr.appendChild(td);
+    });
+    tfoot.appendChild(fr); table.appendChild(tfoot);
+    box.appendChild(table);
+
+    // Own count of scored vs unscored (from the rows themselves)
+    var rows = data.rows || [];
+    var nScored = rows.filter(function (r) { return isNum(r.values && r.values[F_PAIN.name]); }).length;
+    var notes = el("p", "small muted");
+    notes.style.marginTop = "10px";
+    notes.textContent =
+      "Pijnwaarden op de schaal " + fmtInt.format(PAIN_MIN) + "–" + fmtInt.format(PAIN_MAX) + ". " +
+      "Van de " + rows.length + " runs hebben er " + nScored + " een pijnscore. " +
+      "Runs zonder score tellen niet mee in gemiddelde of ergste pijn (— = geen enkele score in die groep). " +
+      "Een gemiddelde over één of twee runs zegt weinig. De samenvatting geldt altijd voor alle runs, ook als de grafiek een kortere periode toont.";
+    box.appendChild(notes);
+  }
+
+  // ---------- Run list ----------
+  var listEl = document.getElementById("runs");
+  var sortEl = document.getElementById("sort");
+
+  function sortedRows() {
+    var rows = (data.rows || []).slice();
+    var mode = sortEl.value;
+    if (mode === "date") {
+      rows.sort(function (a, b) {
+        var da = (a.values && a.values[F_DATE.name]) || "", db = (b.values && b.values[F_DATE.name]) || "";
+        return da < db ? 1 : da > db ? -1 : 0;
+      });
+    } else if (mode === "unscored") {
+      rows = rows.map(function (r, i) { return { r: r, i: i }; }).sort(function (a, b) {
+        var ua = isNum(a.r.values && a.r.values[F_PAIN.name]) ? 1 : 0, ub = isNum(b.r.values && b.r.values[F_PAIN.name]) ? 1 : 0;
+        return ua - ub || a.i - b.i;
+      }).map(function (x) { return x.r; });
+    }
+    return rows; // "contract": order as delivered (contract order: distance, longest first)
+  }
+
+  function buildRow(row) {
+    var uid = "run" + (++idSeq);
+    var li = el("li", "run");
+    var info = el("div");
+    var head = el("div", "run-head");
+    var dateSpan = el("span", "date");
+    var sep = document.createTextNode(" · ");
+    var distSpan = el("span", "dist");
+    var badge = el("span", "badge-none", "geen score");
+    head.appendChild(dateSpan); head.appendChild(sep); head.appendChild(distSpan); head.appendChild(badge);
+    info.appendChild(head);
+    var note = el("div", "run-note");
+    var noteLabel = el("span", "run-note-label", F_NOTE.label + ": ");
+    var noteText = el("span");
+    note.appendChild(noteLabel); note.appendChild(noteText);
+    info.appendChild(note);
+    li.appendChild(info);
+
+    var pain = el("div", "pain");
+    var form = el("form");
+    form.noValidate = true;
+    var label = el("label", null, F_PAIN.label);
+    label.htmlFor = uid + "-pain";
+    var input = el("input");
+    input.type = "text";
+    input.inputMode = "decimal";
+    input.autocomplete = "off";
+    input.id = uid + "-pain";
+    input.name = F_PAIN.name;
+    var hint = el("div", "hint", fmtInt.format(PAIN_MIN) + " (geen) tot " + fmtInt.format(PAIN_MAX) + " (ernstig); leeg = geen score");
+    hint.id = uid + "-hint";
+    var reason = el("div", "hint");
+    reason.id = uid + "-reason";
+    var status = el("div", "status");
+    status.id = uid + "-status";
+    status.setAttribute("aria-live", "polite");
+    var errors = el("div", "errors");
+    errors.id = uid + "-err";
+    errors.hidden = true;
+    errors.setAttribute("role", "alert");
+    input.setAttribute("aria-describedby", hint.id + " " + reason.id + " " + errors.id + " " + status.id);
+    form.appendChild(label); form.appendChild(input); form.appendChild(hint); form.appendChild(reason);
+    form.appendChild(errors); form.appendChild(status);
+    pain.appendChild(form);
+    li.appendChild(pain);
+
+    var re = { li: li, dateSpan: dateSpan, distSpan: distSpan, badge: badge, note: note, noteText: noteText,
+      input: input, reason: reason, status: status, errors: errors, id: row.id, row: row };
+
+    input.addEventListener("input", function () {
+      var s = st(re.id);
+      s.dirty = true; s.draft = input.value; s.ok = false;
+      status.textContent = "";
+      status.className = "status";
+    });
+    input.addEventListener("change", function () { save(re); });
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        var s = st(re.id);
+        s.dirty = false; s.error = null;
+        input.value = painToInput(re.row.values[F_PAIN.name]);
+        paintErrors(re);
+      }
+    });
+    form.addEventListener("submit", function (e) { e.preventDefault(); save(re); });
+    input.addEventListener("blur", function () {
+      if (pendingReorder) setTimeout(function () { if (!listEl.contains(document.activeElement)) renderList(); }, 0);
+    });
+    return re;
+  }
+
+  function painToInput(v) { return isNum(v) ? fmt1.format(v) : ""; }
+
+  function updateRow(re, row) {
+    re.row = row;
+    var v = row.values || {};
+    re.dateSpan.textContent = fDate(v[F_DATE.name]);
+    re.distSpan.textContent = fDist(v[F_DIST.name]);
+    re.badge.hidden = isNum(v[F_PAIN.name]);
+    var nt = v[F_NOTE.name];
+    re.note.hidden = !(typeof nt === "string" && nt.trim() !== "");
+    re.noteText.textContent = re.note.hidden ? "" : nt;
+
+    var s = st(row.id);
+    var act = row.actions && row.actions["$edit"];
+    var editable = !!(EDIT && act && act.enabled);
+    re.input.disabled = !editable || s.pending;
+    re.input.readOnly = false;
+    if (!EDIT) re.reason.textContent = "Aanpassen is niet mogelijk op deze gegevens.";
+    else if (act && act.enabled === false) re.reason.textContent = "Niet aan te passen: " + (act.reason || "geen reden opgegeven");
+    else if (!act) re.reason.textContent = "Niet aan te passen.";
+    else re.reason.textContent = "";
+    re.reason.hidden = !re.reason.textContent;
+
+    // never overwrite what the user is typing or a refused draft
+    var focused = document.activeElement === re.input;
+    var shown = ("saved" in s) ? s.saved : v[F_PAIN.name];
+    if (!s.dirty && !focused && !s.pending) re.input.value = painToInput(shown);
+
+    paintErrors(re);
+  }
+
+  function parseInput(text) {
+    var t = String(text || "").trim().replace(/\s+/g, "");
+    if (t === "") return { ok: true, value: null };
+    var norm = t.replace(",", ".");
+    if (!/^-?\d+(\.\d+)?$/.test(norm)) return { ok: false };
+    var n = Number(norm);
+    return isFinite(n) ? { ok: true, value: n } : { ok: false };
+  }
+
+  function paintErrors(re) {
+    var s = st(re.id);
+    re.errors.textContent = "";
+    if (!s.error) {
+      re.errors.hidden = true;
+      re.input.removeAttribute("aria-invalid");
+    } else {
+      re.errors.hidden = false;
+      re.input.setAttribute("aria-invalid", "true");
+      s.error.forEach(function (item) {
+        var p = el("p", null, item.message);
+        re.errors.appendChild(p);
+        if (item.repair) re.errors.appendChild(el("p", "repair", item.repair));
+      });
+    }
+    if (s.pending) { re.status.textContent = "Opslaan…"; re.status.className = "status"; }
+    else if (s.ok) { re.status.textContent = "Opgeslagen."; re.status.className = "status ok"; }
+    else if (!s.dirty) { re.status.textContent = ""; re.status.className = "status"; }
+  }
+
+  function errorItems(err) {
+    var items = [];
+    if (!err) return [{ message: "Het opslaan is geweigerd." }];
+    var vs = Array.isArray(err.violations) ? err.violations : [];
+    var mine = vs.filter(function (v) { return !v.field || v.field === F_PAIN.name; });
+    var others = vs.filter(function (v) { return v.field && v.field !== F_PAIN.name; });
+    if (!vs.length || err.message) items.push({ message: err.message || "Het opslaan is geweigerd.", repair: vs.length ? null : err.repair });
+    mine.concat(others).forEach(function (v) {
+      var prefix = "";
+      if (v.field && v.field !== F_PAIN.name) { var f = fieldByName(v.field); prefix = (f ? f.label : v.field) + ": "; }
+      items.push({ message: prefix + (v.message || v.code || "Ongeldige waarde."), repair: v.repair });
+    });
+    if (vs.length && err.repair) items.push({ message: "", repair: err.repair });
+    if (Array.isArray(err.didYouMean) && err.didYouMean.length) items.push({ message: "Bedoelde je: " + err.didYouMean.join(", ") + "?" });
+    return items.filter(function (i) { return i.message || i.repair; });
+  }
+
+  function save(re) {
+    var s = st(re.id);
+    if (s.pending) return;
+    var parsed = parseInput(re.input.value);
+    var current = re.row.values ? re.row.values[F_PAIN.name] : null;
+    if (!parsed.ok) {
+      s.error = [{ message: "Dit is geen getal.", repair: "Geef een getal van " + fmtInt.format(PAIN_MIN) + " tot " + fmtInt.format(PAIN_MAX) + " (bijvoorbeeld 3 of 2,5), of laat het veld leeg voor ‘geen score’." }];
+      s.dirty = true;
+      paintErrors(re);
+      return;
+    }
+    var cur = isNum(current) ? current : null;
+    if (parsed.value === cur) {
+      s.dirty = false; s.error = null;
+      re.input.value = painToInput(cur);
+      paintErrors(re);
+      return;
+    }
+    s.pending = true; s.ok = false; s.error = null;
+    var hadFocus = document.activeElement === re.input;
+    re.input.disabled = true;
+    paintErrors(re);
+    var params = {};
+    params[F_PAIN.name] = parsed.value; // null clears the score
+    var p;
+    try { p = surface.act("$edit", { id: re.id, params: params }); }
+    catch (e) { p = Promise.resolve({ ok: false, error: { message: "Het opslaan kon niet worden verstuurd." } }); }
+    Promise.resolve(p).then(function (res) {
+      s.pending = false;
+      if (res && res.ok) {
+        s.dirty = false; s.error = null; s.ok = true;
+        // reflect the saved value until the subscription delivers the new row
+        s.saved = parsed.value;
+      } else {
+        s.dirty = true; s.ok = false;
+        s.error = errorItems(res && res.error);
+      }
+      updateRow(re, re.row);
+      if (hadFocus && !re.input.disabled) re.input.focus();
+    }, function () {
+      s.pending = false; s.dirty = true;
+      s.error = [{ message: "Het opslaan is mislukt.", repair: "Probeer het opnieuw." }];
+      updateRow(re, re.row);
+    });
+  }
+
+  function renderList() {
+    var rows = sortedRows();
+    var emptyEl = document.getElementById("list-empty");
+    if (!loaded) { emptyEl.hidden = false; emptyEl.textContent = "Gegevens laden…"; }
+    else if (!rows.length) { emptyEl.hidden = false; emptyEl.textContent = "Er zijn nog geen runs."; }
+    else emptyEl.hidden = true;
+
+    var seen = {};
+    rows.forEach(function (row) {
+      if (!row || row.id == null) return;
+      seen[row.id] = true;
+      if (!rowEls[row.id]) rowEls[row.id] = buildRow(row);
+      updateRow(rowEls[row.id], row);
+    });
+    // remove rows that disappeared (unless the user is typing in it)
+    Object.keys(rowEls).forEach(function (id) {
+      if (seen[id]) return;
+      var re = rowEls[id];
+      if (re.li.contains(document.activeElement)) return;
+      if (re.li.parentNode) re.li.parentNode.removeChild(re.li);
+      delete rowEls[id]; delete rowState[id];
+    });
+    // reorder, but never move the row the user is working in
+    var desired = rows.filter(function (r) { return r && rowEls[r.id]; }).map(function (r) { return rowEls[r.id].li; });
+    var currentOrder = Array.prototype.slice.call(listEl.children);
+    var same = desired.length === currentOrder.length && desired.every(function (li, i) { return currentOrder[i] === li; });
+    if (!same) {
+      if (listEl.contains(document.activeElement) && currentOrder.length) {
+        pendingReorder = true;
+        desired.forEach(function (li) { if (!li.parentNode) listEl.appendChild(li); });
+      } else {
+        pendingReorder = false;
+        desired.forEach(function (li) { listEl.appendChild(li); });
+      }
+    } else pendingReorder = false;
+  }
+
+  // ---------- Wiring ----------
+  function renderAll() {
+    renderList();
+    renderChart();
+    renderSummary();
+  }
+
+  periodEl.addEventListener("change", function () { selectedKey = null; renderChart(); });
+  sortEl.addEventListener("change", function () { renderList(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") hideTip(); });
+  document.addEventListener("click", function (e) {
+    if (!wrapEl.contains(e.target) && selectedKey == null) hideTip();
+  });
+
+  var lastW = 0;
+  function onResize() {
+    var w = wrapEl.clientWidth;
+    if (Math.abs(w - lastW) > 2) { lastW = w; renderChart(); }
+  }
+  if (typeof ResizeObserver === "function") new ResizeObserver(onResize).observe(wrapEl);
+  else window.addEventListener("resize", onResize);
+
+  renderAll();
+
+  if (!surface || typeof surface.subscribe !== "function") {
+    loaded = true;
+    document.getElementById("list-empty").hidden = false;
+    document.getElementById("list-empty").textContent = "De gegevens zijn niet beschikbaar.";
+    return;
+  }
+  surface.subscribe(function (result) {
+    result = result || {};
+    data = {
+      total: isNum(result.total) ? result.total : (Array.isArray(result.rows) ? result.rows.length : 0),
+      rows: Array.isArray(result.rows) ? result.rows.filter(function (r) { return r && r.id != null; }).map(function (r) {
+        return { id: r.id, values: r.values || {}, actions: r.actions || {} };
+      }) : [],
+      summary: result.summary || null
+    };
+    loaded = true;
+    Object.keys(rowState).forEach(function (id) { delete rowState[id].saved; });
+    renderAll();
+  });
+})();
+</script>
+</body>
+</html>
