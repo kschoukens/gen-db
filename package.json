@@ -1,0 +1,13 @@
+{
+  "name": "gen-db",
+  "version": "0.1.0",
+  "description": "GenDB — proof of concept van een contract-database voor generatieve UI en AI-agents",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test",
+    "demo": "node demo/story.js",
+    "serve": "node demo/server.js"
+  },
+  "engines": { "node": ">=20" }
+}

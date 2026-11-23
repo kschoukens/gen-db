@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GenDB demo</title>
+<style>
+  body { margin: 0; background: var(--g-surface); color: var(--g-text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  h1, h2, h3, h4, p { margin: 0; }
+  button, select { font: inherit; color: inherit; }
+  .top { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--g-line); background: var(--g-panel); }
+  .top h1 { font-size: 18px; display: inline; margin-right: 8px; }
+  .top .sub { color: var(--g-text-2); }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .controls label { display: flex; gap: 6px; align-items: center; color: var(--g-text-2); font-size: 13px; }
+  .controls select, .btn { padding: 5px 10px; border: 1px solid var(--g-line); border-radius: 6px; background: var(--g-panel); color: var(--g-text); cursor: pointer; }
+  .btn:hover:not(:disabled) { border-color: var(--g-muted); }
+  .btn:disabled { color: var(--g-muted); cursor: not-allowed; }
+  .btn.primary { background: var(--g-accent); border-color: var(--g-accent); color: #fff; font-weight: 600; }
+  .layout { display: grid; grid-template-columns: 210px minmax(0, 1fr) 380px; gap: 16px; padding: 16px; align-items: start; }
+  @media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  .col > h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--g-text-2); margin-bottom: 8px; }
+  .side h2:not(:first-child) { margin-top: 20px; }
+  .hint { color: var(--g-text-2); font-size: 12px; margin-top: 8px; }
+  #surfaces { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  #surfaces button { width: 100%; text-align: left; padding: 8px 10px; border: 1px solid var(--g-line); border-radius: 8px; background: var(--g-panel); cursor: pointer; }
+  #surfaces button[aria-current="true"] { border-color: var(--g-accent); box-shadow: inset 3px 0 0 var(--g-accent); }
+  #surfaces small { display: block; color: var(--g-text-2); }
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--g-line); }
+  .tabs button { padding: 6px 12px; border: 0; background: none; cursor: pointer; color: var(--g-text-2); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tabs button[aria-selected="true"] { color: var(--g-text); border-bottom-color: var(--g-accent); font-weight: 600; }
+  .world { font-size: 12px; color: var(--g-text-2); margin-bottom: 12px; padding: 6px 10px; border: 1px dashed var(--g-muted); border-radius: 6px; }
+  pre { margin: 0; padding: 12px; background: var(--g-panel); border: 1px solid var(--g-line); border-radius: 8px; overflow: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; max-height: 75vh; }
+  .steps { display: grid; gap: 6px; }
+  .steps .btn { text-align: left; }
+  .steps small { display: block; color: var(--g-text-2); }
+  .card { background: var(--g-panel); border: 1px solid var(--g-line); border-radius: 8px; padding: 12px; margin-top: 12px; overflow-wrap: anywhere; }
+  .card h3 { font-size: 14px; }
+  .card h4 { font-size: 12px; color: var(--g-text-2); margin: 10px 0 4px; }
+  .card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; }
+  .card small, .meta { color: var(--g-text-2); font-size: 12px; }
+  .card small { display: block; }
+  .card .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .badge { display: inline-block; font-size: 11px; padding: 0 6px; border: 1px solid var(--g-muted); border-radius: 999px; color: var(--g-text-2); margin-right: 4px; }
+  .badge.refused { border-color: var(--g-critical); color: var(--g-text); }
+  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #log { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 12px; }
+  #log li { padding-left: 10px; border-left: 2px solid var(--g-line); overflow-wrap: anywhere; }
+  #log .who { font-weight: 600; }
+  #log small { display: block; color: var(--g-text-2); }
+</style>
+</head>
+<body>
+<header class="top">
+  <div><h1>GenDB</h1><span class="sub">proof of concept: de database als contract voor een gegenereerde UI</span></div>
+  <div class="controls">
+    <label>Ingelogd als <select id="actor"></select></label>
+    <label>Wereld <select id="branch"></select></label>
+    <button class="btn" id="reset">Opnieuw beginnen</button>
+  </div>
+</header>
+
+<main class="layout">
+  <nav class="col">
+    <h2>Surfaces</h2>
+    <ul id="surfaces"></ul>
+    <p class="hint">Dit is alles wat deze gebruiker in deze wereld kan aanraken. Een gegenereerde UI krijgt nooit meer dan één surface.</p>
+  </nav>
+
+  <section class="col">
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="ui" aria-selected="true">Gegenereerde UI</button>
+      <button role="tab" data-tab="contract" aria-selected="false">Contract</button>
+    </div>
+    <p class="world" id="world" hidden></p>
+    <div id="ui"></div>
+    <pre id="contract" hidden></pre>
+  </section>
+
+  <aside class="col side">
+    <h2>Agent</h2>
+    <div class="steps">
+      <button class="btn" id="knee">“Houd ook mijn kniepijn bij”<small>De agent breidt het schema uit en doet een gok, in een eigen wereld</small></button>
+      <button class="btn" id="metres">“Ik wil afstanden in meters”<small>Een brekende wijziging wordt geweigerd; een lens lost het op</small></button>
+      <button class="btn" id="hallucinate">Laat een gehallucineerde UI los<small>Dertien foute pogingen tegen de echte gegevens</small></button>
+      <button class="btn" id="undo">Maak de gok van de agent ongedaan<small>Terugdraaien op intentie, niet op tijdstip</small></button>
+    </div>
+    <div id="reviews"></div>
+    <div id="output"></div>
+    <h2>Tijdlijn</h2>
+    <ol id="log"></ol>
+  </aside>
+</main>
+
+<script type="module">
+import { generateUI, bindData, coerce, GENUI_CSS } from '/genui.js';
+
+document.head.appendChild(Object.assign(document.createElement('style'), { textContent: GENUI_CSS }));
+
+const $ = (selector) => document.querySelector(selector);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const S = { actor: 'user:kim', branch: 'main', surface: null, contract: null, stream: null, deferred: null, state: null };
+const LEVEL = { additive: 'additief', tightening: 'strenger', breaking: 'brekend' };
+
+async function api(path, body) {
+  const url = `${path}?actor=${encodeURIComponent(S.actor)}&branch=${encodeURIComponent(S.branch)}`;
+  const response = await fetch(url, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  return response.json();
+}
+
+// -- the generated UI and its binding ---------------------------------------------------------------
+
+async function openSurface(name) {
+  S.stream?.close();
+  S.surface = name;
+  S.contract = null;
+  if (!name) { $('#ui').innerHTML = '<p class="hint">Geen surfaces voor deze gebruiker in deze wereld.</p>'; $('#contract').textContent = ''; return; }
+
+  // Step 1: the generator sees the contract, and only the contract.
+  const contract = await api(`/api/surfaces/${encodeURIComponent(name)}/contract`);
+  if (contract.error) { $('#ui').innerHTML = `<p class="hint">${esc(contract.error.message)}</p>`; return; }
+  S.contract = contract;
+  $('#ui').innerHTML = generateUI(contract);
+  $('#contract').textContent = JSON.stringify(contract, null, 2);
+
+  // Step 2: live data is bound in the browser.
+  S.stream = new EventSource(`/api/surfaces/${encodeURIComponent(name)}/stream?actor=${encodeURIComponent(S.actor)}&branch=${encodeURIComponent(S.branch)}`);
+  S.stream.onmessage = (event) => bind(JSON.parse(event.data));
+}
+
+function bind(result) {
+  if (result.error || !S.contract) return;
+  const rows = $('#ui [data-slot="rows"]');
+  // Do not pull the table out from under someone who is typing in it.
+  if (rows.contains(document.activeElement) && document.activeElement.matches('input:not([type=checkbox])')) { S.deferred = result; return; }
+  const html = bindData(S.contract, result);
+  $('#ui [data-slot="summary"]').innerHTML = html.summary;
+  rows.innerHTML = html.rows;
+}
+
+function showError(error) {
+  const slot = $('#ui [data-slot="error"]');
+  if (!slot) return;
+  slot.hidden = !error;
+  if (!error) return;
+  const details = error.violations ?? [{ message: error.message, repair: error.repair }];
+  slot.innerHTML = `<strong>De database weigert dit (${esc(error.code)})</strong>` +
+    details.map((d) => `<span>${esc(d.message)}${d.repair ? ` → ${esc(d.repair)}` : ''}</span>`).join('<br>');
+}
+
+async function act(action, id, params) {
+  const result = await api(`/api/surfaces/${encodeURIComponent(S.surface)}/act`, { action, id, params });
+  showError(result.error ?? null);
+  return !result.error;
+}
+
+$('#ui').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.target;
+  const action = S.contract.actions.find((a) => a.name === form.dataset.action);
+  const params = {};
+  for (const p of action.params) {
+    const el = form.elements[p.name];
+    const value = coerce(p, el.type === 'checkbox' ? el.checked : el.value);
+    if (value !== null && !(p.type === 'boolean' && !value)) params[p.name] = value;
+  }
+  if (await act(action.name, undefined, params)) form.reset();
+});
+
+$('#ui').addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-action][data-id]');
+  if (button) act(button.dataset.action, button.dataset.id, {});
+});
+
+$('#ui').addEventListener('change', (event) => {
+  const el = event.target.closest('[data-edit]');
+  if (!el) return;
+  const field = S.contract.fields.find((f) => f.name === el.name);
+  act('$edit', el.dataset.id, { [el.name]: coerce(field, el.type === 'checkbox' ? el.checked : el.value) });
+});
+
+$('#ui').addEventListener('focusout', () => setTimeout(() => {
+  if (S.deferred) { const result = S.deferred; S.deferred = null; bind(result); }
+}));
+
+// -- everything around it ---------------------------------------------------------------------------
+
+function show(value) {
+  if (value === null || value === undefined) return '–';
+  return esc(typeof value === 'object' ? JSON.stringify(value) : value);
+}
+
+function reviewCard(r) {
+  const data = r.data.slice(0, 5).map((c) => `<li><code>${esc(c.entity)}</code> · ${esc(c.attribute.split('.')[1])}: ${show(c.before)} → <b>${show(c.after)}</b>${c.confidence != null ? `<small>zekerheid ${Math.round(c.confidence * 100)}% · ${esc(c.actor)}</small>` : ''}</li>`).join('');
+  return `
+    <article class="card" data-branch="${esc(r.branch)}">
+      <h3>Voorstel: “${esc(r.intent ?? r.branch)}”</h3>
+      <p class="meta">wereld <code>${esc(r.branch)}</code> · ${r.transactions} ${r.transactions === 1 ? 'transactie' : 'transacties'} · nog niet zichtbaar in main</p>
+      ${r.schema.length ? `<h4>Schema</h4><ul>${r.schema.map((c) => `<li><span class="badge">${LEVEL[c.level]}</span><code>${esc(c.entity.split('/')[1])}</code><small>${esc(c.reasons.join('; '))}</small></li>`).join('')}</ul>` : ''}
+      ${r.data.length ? `<h4>Gegevens: ${r.data.length} waarden</h4><ul>${data}${r.data.length > 5 ? `<li class="meta">… en ${r.data.length - 5} meer</li>` : ''}</ul>` : '<h4>Gegevens</h4><p class="meta">Geen enkel feit verandert.</p>'}
+      ${r.conflicts.length ? `<h4>Conflicten</h4><ul>${r.conflicts.map((c) => `<li><code>${esc(c.entity)}</code> ${esc(c.attribute)}: hier ${show(c.theirs)}, in main ${show(c.ours)}</li>`).join('')}</ul>` : ''}
+      <div class="row">
+        <button class="btn primary" data-do="merge">Goedkeuren en samenvoegen</button>
+        <button class="btn" data-do="preview">Eerst bekijken</button>
+        <button class="btn" data-do="discard">Weggooien</button>
+      </div>
+    </article>`;
+}
+
+function output(title, items) {
+  $('#output').innerHTML = `<article class="card"><h3>${esc(title)}</h3><ul style="margin-top:8px">${items.join('')}</ul></article>`;
+}
+
+const refusal = (label, error) => `<li><span class="badge refused">geweigerd</span>${esc(label)}<small><code>${esc(error.code)}</code> ${esc(error.violations?.[0]?.message ?? error.message)}</small><small>herstel: ${esc(error.violations?.[0]?.repair ?? error.repair ?? '')}</small></li>`;
+
+async function refresh() {
+  let state = await api('/api/state');
+  const open = state.branches.filter((b) => b.status === 'open').map((b) => b.name);
+  if (!open.includes(S.branch)) { S.branch = 'main'; state = await api('/api/state'); }
+  S.state = state;
+
+  $('#actor').innerHTML = state.actors.map((a) => `<option${a === S.actor ? ' selected' : ''} value="${esc(a)}">${esc(a)}${state.owners.includes(a) ? ' (eigenaar)' : ''}</option>`).join('');
+  $('#branch').innerHTML = open.map((b) => `<option${b === S.branch ? ' selected' : ''}>${esc(b)}</option>`).join('');
+  $('#world').hidden = S.branch === 'main';
+  $('#world').textContent = `Je kijkt in de wereld “${S.branch}”: een voorstel van een agent. Niets hiervan bestaat in main tot een eigenaar het goedkeurt.`;
+
+  $('#surfaces').innerHTML = state.surfaces.map((s) => `<li><button data-surface="${esc(s.name)}" aria-current="${s.name === S.surface}">${esc(s.label)}<small>${esc(s.description)}</small></button></li>`).join('');
+  $('#reviews').innerHTML = state.reviews.map(reviewCard).join('');
+
+  const exists = (name) => state.branches.some((b) => b.name === name);
+  $('#knee').disabled = exists('agent/kniepijn');
+  $('#metres').disabled = exists('agent/meters');
+  $('#undo').disabled = !state.canUndoKnee;
+
+  $('#log').innerHTML = state.log.map((tx) => `
+    <li><span class="who">#${tx.tx} ${esc(tx.actor)}</span> — ${esc(tx.intent ?? '')}
+      <small>${[tx.kind === 'schema' ? 'schema' : `${tx.facts} feiten`, tx.via && `via ${tx.via}`, tx.confidence != null && `zekerheid ${Math.round(tx.confidence * 100)}%`, tx.mergedFrom && `uit ${tx.mergedFrom}, goedgekeurd door ${tx.approvedBy}`].filter(Boolean).map(esc).join(' · ')}</small></li>`).join('');
+
+  if (!state.surfaces.some((s) => s.name === S.surface)) await openSurface(state.surfaces[0]?.name ?? null);
+}
+
+async function switchTo(change) {
+  Object.assign(S, change);
+  S.surface = change.surface ?? S.surface;
+  const wanted = S.surface;
+  S.surface = null;
+  await refresh();
+  if (S.state.surfaces.some((s) => s.name === wanted)) await openSurface(wanted);
+  await refresh();
+}
+
+$('#actor').addEventListener('change', (e) => switchTo({ actor: e.target.value }));
+$('#branch').addEventListener('change', (e) => switchTo({ branch: e.target.value }));
+$('#surfaces').addEventListener('click', async (e) => {
+  const button = e.target.closest('[data-surface]');
+  if (button) { await openSurface(button.dataset.surface); refresh(); }
+});
+
+document.querySelector('.tabs').addEventListener('click', (e) => {
+  const tab = e.target.closest('[data-tab]')?.dataset.tab;
+  if (!tab) return;
+  for (const b of document.querySelectorAll('.tabs button')) b.setAttribute('aria-selected', b.dataset.tab === tab);
+  $('#ui').hidden = tab !== 'ui';
+  $('#contract').hidden = tab !== 'contract';
+});
+
+$('#knee').addEventListener('click', async () => { $('#output').innerHTML = ''; await api('/api/agent/knee', {}); });
+$('#metres').addEventListener('click', async () => {
+  const { refused } = await api('/api/agent/metres', {});
+  output('De agent probeerde eerst de eenheid van distance_km te wijzigen', [refusal('km → m op het bestaande attribuut', refused.error), '<li class="meta">De agent las de herstelhint en stelde daarna een lens voor. Zie het voorstel hierboven.</li>']);
+});
+$('#hallucinate').addEventListener('click', async () => {
+  const results = await api('/api/hallucinate', {});
+  const refused = results.filter((r) => r.result.error);
+  output(`${refused.length} van ${results.length} pogingen geweigerd, niets geschreven`, results.map((r) => (r.result.error ? refusal(r.label, r.result.error) : `<li>${esc(r.label)}: toegelaten</li>`)));
+});
+$('#undo').addEventListener('click', async () => {
+  const result = await api('/api/undo', { intent: 'kniepijn bijhouden' });
+  if (result.error) return output('Ongedaan maken', [refusal('undo', result.error)]);
+  output(`${result.restored} waarden teruggezet`, [
+    `<li class="meta">Alles wat geschreven werd voor de intentie “kniepijn bijhouden” is teruggedraaid met een nieuwe transactie. De geschiedenis blijft intact.</li>`,
+    ...result.skipped.map((s) => `<li><code>${esc(s.entity)}</code> ${esc(s.attribute.split('.')[1])}: sindsdien door iemand aangepast, dus met rust gelaten</li>`),
+  ]);
+});
+$('#reviews').addEventListener('click', async (e) => {
+  const action = e.target.dataset.do;
+  const branch = e.target.closest('[data-branch]')?.dataset.branch;
+  if (!action) return;
+  if (action === 'preview') return switchTo({ branch });
+  const result = await api(`/api/branches/${encodeURIComponent(branch)}/${action}`, {});
+  if (result.error) output('Samenvoegen', [refusal(branch, result.error)]);
+  else $('#output').innerHTML = '';
+});
+$('#reset').addEventListener('click', async () => {
+  await api('/api/reset', {});
+  $('#output').innerHTML = '';
+  await switchTo({ actor: 'user:kim', branch: 'main', surface: null });
+});
+
+let timer;
+new EventSource('/api/events').onmessage = () => { clearTimeout(timer); timer = setTimeout(refresh, 40); };
+refresh();
+</script>
+</body>
+</html>
