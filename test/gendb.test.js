@@ -100,6 +100,9 @@ test('all problems of a write are reported together', () => {
     ['date', 'INVALID_VALUE'], ['distance_km', 'INVALID_VALUE'], ['feeling', 'INVALID_VALUE'],
   ]);
   assert.deepEqual(error.violations[2].didYouMean, ['ok']);
+  // Machine-readable too, so a UI can phrase the problem in its own language.
+  assert.deepEqual([error.violations[1].reason, error.violations[1].limit], ['below_min', 0.1]);
+  assert.deepEqual([error.violations[2].reason, error.violations[2].allowed], ['not_allowed', ['zwaar', 'ok', 'sterk']]);
 });
 
 test('an agent cannot touch main, but can do anything on a branch', () => {

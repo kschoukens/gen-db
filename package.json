@@ -7,7 +7,9 @@
   "scripts": {
     "test": "node --test",
     "demo": "node demo/story.js",
-    "serve": "node demo/server.js"
+    "serve": "node demo/server.js",
+    "mcp": "node demo/mcp.js",
+    "evaluate": "node demo/evaluate.js"
   },
   "engines": { "node": ">=20" }
 }

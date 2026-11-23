@@ -12,31 +12,33 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Checks one value against an attribute or parameter definition. Returns a problem or null. */
 export function checkValue(def, v, lookup) {
-  const fail = (message, repair, extra = {}) => ({ message, repair, got: v, ...extra });
+  // `reason` and `limit` are for UIs that phrase the problem themselves, in the user's language;
+  // `message` and `repair` are for models and for UIs that do not.
+  const fail = (reason, message, repair, extra = {}) => ({ reason, message, repair, got: v, ...extra });
   switch (def.type) {
     case 'string':
-      if (typeof v !== 'string') return fail('must be text', 'Send a string.');
-      if (def.maxLength != null && v.length > def.maxLength) return fail(`is ${v.length} characters; at most ${def.maxLength} allowed`, `Shorten it to ${def.maxLength} characters.`);
+      if (typeof v !== 'string') return fail('wrong_type', 'must be text', 'Send a string.', { expected: 'string' });
+      if (def.maxLength != null && v.length > def.maxLength) return fail('too_long', `is ${v.length} characters; at most ${def.maxLength} allowed`, `Shorten it to ${def.maxLength} characters.`, { limit: def.maxLength });
       return null;
     case 'number':
-      if (typeof v !== 'number' || !Number.isFinite(v)) return fail('must be a number', 'Send a JSON number, not text.');
-      if (def.min != null && v < def.min) return fail(`is below the minimum of ${def.min}${def.unit ? ' ' + def.unit : ''}`, `Use a value of at least ${def.min}.`);
-      if (def.max != null && v > def.max) return fail(`is above the maximum of ${def.max}${def.unit ? ' ' + def.unit : ''}`, `Use a value of at most ${def.max}.`);
+      if (typeof v !== 'number' || !Number.isFinite(v)) return fail('wrong_type', 'must be a number', 'Send a JSON number, not text.', { expected: 'number' });
+      if (def.min != null && v < def.min) return fail('below_min', `is below the minimum of ${def.min}${def.unit ? ' ' + def.unit : ''}`, `Use a value of at least ${def.min}.`, { limit: def.min });
+      if (def.max != null && v > def.max) return fail('above_max', `is above the maximum of ${def.max}${def.unit ? ' ' + def.unit : ''}`, `Use a value of at most ${def.max}.`, { limit: def.max });
       return null;
     case 'boolean':
-      return typeof v === 'boolean' ? null : fail('must be true or false', 'Send a JSON boolean.');
+      return typeof v === 'boolean' ? null : fail('wrong_type', 'must be true or false', 'Send a JSON boolean.', { expected: 'boolean' });
     case 'date':
-      return typeof v === 'string' && DATE.test(v) && !Number.isNaN(Date.parse(v)) ? null : fail('must be a calendar date', 'Use the form YYYY-MM-DD.');
+      return typeof v === 'string' && DATE.test(v) && !Number.isNaN(Date.parse(v)) ? null : fail('wrong_type', 'must be a calendar date', 'Use the form YYYY-MM-DD.', { expected: 'date' });
     case 'datetime':
-      return typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? null : fail('must be a timestamp', 'Use ISO 8601, for example 2026-11-23T09:30:00Z.');
+      return typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? null : fail('wrong_type', 'must be a timestamp', 'Use ISO 8601, for example 2026-11-23T09:30:00Z.', { expected: 'datetime' });
     case 'enum':
-      return def.values.includes(v) ? null : fail(`is not one of ${def.values.join(', ')}`, `Use one of: ${def.values.join(', ')}.`, { didYouMean: didYouMean(v, def.values) });
+      return def.values.includes(v) ? null : fail('not_allowed', `is not one of ${def.values.join(', ')}`, `Use one of: ${def.values.join(', ')}.`, { allowed: def.values, didYouMean: didYouMean(v, def.values) });
     case 'ref': {
       const target = typeof v === 'string' ? lookup?.(v) : null;
-      return target?.get('$type') === def.ref ? null : fail(`must refer to an existing ${def.ref}`, `Use the id of an existing ${def.ref}.`);
+      return target?.get('$type') === def.ref ? null : fail('no_such_reference', `must refer to an existing ${def.ref}`, `Use the id of an existing ${def.ref}.`, { expected: def.ref });
     }
     default:
-      return fail(`has unknown type ${def.type}`, 'Fix the schema definition.');
+      return fail('wrong_type', `has unknown type ${def.type}`, 'Fix the schema definition.');
   }
 }
 
