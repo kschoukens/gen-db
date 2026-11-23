@@ -10,8 +10,14 @@
 //   holds the capability   <------>   window.surface.{contract, subscribe, act}
 //   relays read()/act()               the model's HTML, unmodified
 
-// No `connect-src`, no remote scripts/styles/images/fonts, nowhere for a form to post to.
+// Inside the iframe: no `connect-src`, no remote scripts, styles, images or fonts, and nowhere for a
+// form to post to.
 export const SANDBOX_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'";
+
+// On the host page. A policy inside a document cannot stop that document from navigating itself
+// away, with whatever it wants to leak in the URL. Only the embedding page can forbid that: with
+// this policy the frame may show its srcdoc and nothing else, ever.
+export const HOST_CSP = "frame-src 'none'";
 
 /** Attributes for the iframe. No allow-same-origin: the document gets an opaque origin of its own. */
 export const SANDBOX_ATTRIBUTE = 'allow-scripts allow-forms';
@@ -44,6 +50,14 @@ function bootstrap(contract) {
   addEventListener('error', (event) => {
     parent.postMessage({ gendb: 'error', message: String(event.message) }, '*');
   });
+
+  // WebRTC is the one network API no content security policy governs (Chromium does not implement
+  // the `webrtc` directive), and a STUN lookup can carry data out in a host name. Removing the
+  // constructors stops code that merely tries; it is not a boundary. Closing this for real takes the
+  // browser or the network: see docs/ontwerp.md.
+  for (const name of ['RTCPeerConnection', 'webkitRTCPeerConnection', 'RTCDataChannel']) {
+    try { delete window[name]; Object.defineProperty(window, name, { value: undefined }); } catch { /* best effort */ }
+  }
 
   Object.defineProperty(window, 'surface', {
     value: Object.freeze({
