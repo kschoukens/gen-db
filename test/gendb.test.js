@@ -36,6 +36,9 @@ test('the contract describes meaning and affordances, and contains no data', () 
   assert.deepEqual(contract.actions.map((a) => [a.name, a.scope]), [['Run.log', 'collection'], ['Run.remove', 'row'], ['$edit', 'row']]);
   assert.deepEqual([contract.actions[1].availableWhen, contract.actions[1].otherwise], ['Run.race != true', 'wedstrijdresultaten zijn definitief']);
   assert.equal(contract.rules.length, 2);
+  assert.deepEqual(contract.summary.by, { label: 'Per maand', key: 'month of Run.date, as YYYY-MM', keyExample: '2026-11' });
+  assert.match(contract.summary.measures[0].meaning, /left out, not counted as 0/);
+  assert.equal(contract.summary.measures[1].meaning, 'number of rows, with or without values');
   const text = JSON.stringify(contract);
   assert.ok(!text.includes('Hasselt') && !text.includes('run_'), 'no row data leaks into the contract');
 });

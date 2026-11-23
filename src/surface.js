@@ -104,7 +104,7 @@ export class Surface {
     });
     if ((def.editable ?? []).length) {
       actions.push({
-        name: '$edit', kind: 'update', scope: 'row', label: 'Edit', description: 'Change editable fields of a row in place.',
+        name: '$edit', kind: 'update', scope: 'row', label: def.editLabel ?? 'Edit', description: 'Change editable fields of a row in place. Send only the fields that change; null clears a value.',
         params: def.editable.map((attr) => this._field(schema, attr, { required: undefined })),
       });
     }
@@ -116,10 +116,15 @@ export class Surface {
       entity: { type: def.from, description: schema.types.get(def.from).description },
       fields: def.fields.map((attr) => this._field(schema, attr, { editable: def.editable?.includes(attr) || undefined })),
       actions,
+      // Spelled out because models asked: what does a count count, are empty values zero, and what
+      // do the group keys look like? (They were given only this contract, and these were their questions.)
       summary: def.summary && {
-        measures: Object.entries(def.summary.measures).map(([name, m]) =>
-          clean({ name, label: m.label ?? name, fn: m.fn, of: m.of, unit: m.fn === 'count' ? undefined : schema.attrs.get(m.of).unit })),
-        by: def.summary.by && { label: def.summary.by.label ?? 'group' },
+        covers: 'all rows of the surface, also when read() returns fewer',
+        measures: Object.entries(def.summary.measures).map(([name, m]) => clean({
+          name, label: m.label ?? name, fn: m.fn, of: m.of, unit: m.fn === 'count' ? undefined : schema.attrs.get(m.of).unit,
+          meaning: m.fn === 'count' ? 'number of rows, with or without values' : `${m.fn} of ${m.of} over the rows that have one; rows without a value are left out, not counted as 0; null when no row has one`,
+        })),
+        by: def.summary.by && clean({ label: def.summary.by.label ?? 'group', key: explain(def.summary.by.expr), keyExample: def.summary.by.example }),
       },
       order: def.orderBy,
       rules: schema.rulesOf(def.from).map(([id, r]) => ({ id, description: r.description })),

@@ -98,7 +98,8 @@ export function explain(x) {
     case 'or': return e.map((s) => `(${s})`).join(' or ');
     case 'implies': return `if (${e[0]}) then (${e[1]})`;
     case 'if': return `(${e[0]}) ? ${e[1]} : ${e[2]}`;
-    case 'month': case 'year': return `${op} of ${e[0]}`;
+    case 'month': return `month of ${e[0]}, as YYYY-MM`;
+    case 'year': return `year of ${e[0]}, as YYYY`;
     default: return `${e[0]} ${op} ${e[1]}`;
   }
 }

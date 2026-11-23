@@ -69,6 +69,7 @@ export const SCHEMA = {
       where: MINE,
       fields: ['Run.date', 'Run.distance_km', 'Run.minutes', 'Run.feeling', 'Run.race', 'Run.note'],
       editable: ['Run.feeling', 'Run.note'],
+      editLabel: 'Bijwerken',
       actions: ['Run.log', 'Run.remove'],
       orderBy: [['Run.date', 'desc']],
       summary: {
@@ -77,7 +78,7 @@ export const SCHEMA = {
           runs: { fn: 'count', label: 'Runs' },
           longest_km: { fn: 'max', of: 'Run.distance_km', label: 'Langste run' },
         },
-        by: { expr: ['month', ['get', 'Run.date']], label: 'Per maand' },
+        by: { expr: ['month', ['get', 'Run.date']], label: 'Per maand', example: '2026-11' },
       },
       grants: ['user:*'],
     },
@@ -109,8 +110,10 @@ const RUNS = [
   [SAM, '2026-11-16', 5.0, 33, 'ok', false, 'Nieuwe schoenen'],
 ];
 
+/** The demo database. Seeded when empty; with a journal that already has history, it is just reopened. */
 export function createDatabase(options = {}) {
   const db = new Database({ owners: [KIM], ...options });
+  if (db.store.seq > 0) return db;
   db.evolve(SCHEMA, { actor: KIM, intent: 'hardlooplogboek opzetten' });
   for (const [owner, date, distance_km, minutes, feeling, race, note] of RUNS) {
     db.open('mijn-runs', { actor: owner }).act('Run.log', { params: { date, distance_km, minutes, feeling, race, note } }, { intent: 'run loggen' });

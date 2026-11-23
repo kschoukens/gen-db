@@ -78,6 +78,8 @@ Het volledige contract is ongeveer 800 tokens en bevat geen enkele rij. Een mode
 }
 ```
 
+De samenvatting zegt in het contract zelf wat ze betekent (`meaning` per maat, `key` voor de groepssleutel). Dat is toegevoegd nadat de modellen in de proef (sectie 12) er alle drie naar moesten raden.
+
 Drie details die ertoe doen:
 
 - **De reden staat bij de rij.** De UI hoeft de voorwaarde niet na te bouwen; ze toont een uitgeschakelde knop met de reden die de database geeft. Negeert ze dat en roept ze de actie toch aan, dan krijgt ze `ACTION_UNAVAILABLE`.
@@ -88,7 +90,7 @@ Drie details die ertoe doen:
 
 | | Eigenaar (`user:kim`) | Agent (`agent:coach`) | Gegenereerde UI |
 |---|---|---|---|
-| Lezen | alles, via `query()` | in deze PoC ook alles via `query()`; hoort een surface te worden (zie 9.2) | alleen haar surface, alleen de rijen die het rijfilter doorlaat |
+| Lezen | alles, via `query()` | in deze PoC ook alles via `query()`; hoort een surface te worden | alleen haar surface, alleen de rijen die het rijfilter doorlaat |
 | Gegevens schrijven in `main` | ja, gevalideerd | nee | alleen via de acties van haar surface |
 | Schema wijzigen in `main` | ja, als het additief is of de gegevens al voldoen | nee | nee |
 | Werken op een branch | ja | ja: schema uitbreiden, speculatief schrijven | via een surface op die branch |
@@ -148,6 +150,8 @@ Elke weigering heeft een stabiele `code`, een `message` en een `repair`. Bij val
 | `SCHEMA_INVALID`, `SCHEMA_BREAKING`, `SCHEMA_REJECTED_BY_DATA` | een schemavoorstel deugt niet |
 | `MERGE_CONFLICT`, `MERGE_REJECTED`, `BRANCH_CLOSED` | samenvoegen kan niet |
 
+Een schending van een waarde draagt daarnaast een machineleesbare `reason` (`below_min`, `above_max`, `too_long`, `not_allowed`, `wrong_type`, `no_such_reference`) en de `limit` die geraakt werd. De `message` is Engels en bedoeld voor een model; een UI die Nederlands spreekt, verwoordt de melding zelf uit reden en grens. De tokens voegen `TOKEN_INVALID`, `TOKEN_EXPIRED`, `TOKEN_REVOKED` en `CAVEAT_INVALID` toe, het journaal `JOURNAL_CORRUPT` en `JOURNAL_VERSION`.
+
 In de demo is te zien dat dit werkt als lus: de agent die de eenheid wil wijzigen krijgt `SCHEMA_BREAKING` met de lens als hint, en doet het daarna goed.
 
 ## 8. Speculatie, samenvoegen, terugdraaien
@@ -156,21 +160,123 @@ In de demo is te zien dat dit werkt als lus: de agent die de eenheid wil wijzige
 - **`merge(branch, { approvedBy })`** controleert het resultaat tegen wat `main` intussen geworden is, niet tegen wat het was. Daarna worden de transacties één voor één opnieuw afgespeeld, zodat de herkomst het samenvoegen overleeft.
 - **`undo({ intent })`** neemt alles terug wat voor een intentie geschreven werd (of door een actor, een model, via een surface). Het is een nieuwe transactie die de vorige waarden herstelt; de geschiedenis blijft staan. Een waarde die iemand intussen opnieuw wijzigde, blijft zoals ze is en wordt gemeld. Schema-uitbreidingen worden niet teruggedraaid: schema's groeien alleen.
 
-## 9. Wat een echte motor nog nodig heeft
+## 9. Capabilities: een surface die je kunt doorgeven
+
+Een surface bepaalt alles wat een UI kan zien en doen. Over een netwerk betekent dat pas iets als het vasthouden van de surface zelf de toestemming is, zonder "wie ben jij?" bij elk verzoek. Een token is daarom een HMAC-keten in de stijl van macaroons:
+
+```
+sig0 = HMAC(geheim, { id, surface, actor, branch })     uitgegeven door de database
+sigN = HMAC(sigN-1, beperkingN)                         elke beperking maakt het token smaller
+```
+
+Het token draagt de wortel, de beperkingen en alleen de laatste handtekening. Wie het heeft, kan er zelf een beperking aan toevoegen, zonder het geheim en zonder rondje langs de server. Niemand kan er een afhalen of een wortel vervalsen.
+
+| Beperking | Effect |
+|---|---|
+| `fields`, `editable`, `actions` | doorsnede met wat er al mocht; een naam buiten de surface versmalt tot niets |
+| `readOnly` | geen acties, niets bewerkbaar |
+| `where` | een extra rijfilter, met EN verbonden aan dat van de surface |
+| `expires` | de vroegste vervaldatum in de keten geldt |
+| `audience: 'model'` | persoonsgegevens altijd afgeschermd, wat de aanroeper ook vraagt |
+| `id` | een eigen naam, zodat dit afgeleide token apart ingetrokken kan worden |
+
+Keuzes die ertoe doen:
+
+- **Een verborgen veld blijft verborgen langs elke omweg.** Een filter mag alleen velden lezen die op dat punt in de keten zichtbaar zijn, anders is het filter een orakel op de verborgen waarde. Sortering, samenvatting en groepering over een verborgen veld vallen weg. Een actie waarvan de voorwaarde een verborgen veld leest, valt ook weg, omdat "kan niet, want het is een wedstrijd" dat veld zou verraden.
+- **Alles wordt bij elk gebruik opnieuw gecontroleerd**: handtekening, vervaldatum, intrekking en de toekenning in het actuele schema. Een token volgt het levende schema en reikt er nooit voorbij.
+- **Eén antwoord voor elk ongeldig token.** Waarom een handtekening faalt, is een hint voor een vervalser.
+- **Lezen in het verleden vraagt toegang in het heden.** Wie een surface kwijt is, is ook haar geschiedenis kwijt.
+
+Zwaktes die blijven: beperkingen zijn leesbaar voor elke houder (ze beperken, ze verbergen niet), intrekkingen leven alleen in het geheugen, in de demo reizen tokens in de URL, en een validatiefout kan de naam van een verborgen attribuut noemen.
+
+## 10. Het feitenlog op schijf
+
+De store was al een log waar alleen aan toegevoegd wordt, dus duurzaamheid vraagt geen tweede gegevensstructuur: elke wijziging wordt één regel JSON, en een database openen is die regels opnieuw afspelen.
+
+```
+{"t":"gendb-journal","v":1}
+{"t":"tx","ids":3,"tx":{"id":2,"branch":"main","at":"…","actor":"user:kim","intent":"run loggen","facts":[…]}}
+{"t":"fork","ids":15,"branch":{"name":"agent/kniepijn","parent":"main","forkTx":15,…}}
+{"t":"batch","records":[ …alle transacties van een samenvoeging, plus de statuswijziging… ]}
+```
+
+- **Eerst schrijven, dan toepassen.** Een transactie raakt het geheugen pas als ze in het journaal staat. Het geheugen wordt bovendien opgebouwd uit wat geschreven is, zodat geheugen en schijf nooit uiteenlopen.
+- **Een samenvoeging is één regel.** Een crash laat alles of niets achter. Mislukt het schrijven, dan wordt ook het geheugen teruggezet en horen luisteraars niets.
+- **Een afgebroken laatste regel wordt weggegooid en afgeknipt**; die was nooit bevestigd. Schade elders is geen gevolg van een crash en wordt gemeld in plaats van weggeraden. Een bestand dat geen GenDB-journaal is, wordt nooit aangeraakt.
+- **Afspelen controleert de geschiedenis**: transactienummers sluiten aan, er wordt alleen naar open branches geschreven.
+
+Wat ontbreekt: vergrendeling tegen twee processen op één bestand, momentopnamen en compactie (openen leest alles), en `fsync` staat standaard uit, wat beschermt tegen een crash van het proces maar niet tegen stroomuitval.
+
+## 11. Surfaces als MCP-tools
+
+Een surface beschrijft zichzelf volledig, en dat is wat een tooldefinitie in het Model Context Protocol vraagt. Er hoeft per database dus geen lijm geschreven te worden.
+
+| Tool | Wat het doet |
+|---|---|
+| `mijn-runs` | de surface lezen: rijen, mogelijkheden per rij, samenvatting. Altijd met `audience: 'model'`, dus persoonsgegevens afgeschermd |
+| `mijn-runs__Run.log`, `mijn-runs___24edit`, … | één tool per actie, met een invoerschema (types, grenzen, enums, verplicht) afgeleid uit het contract |
+
+- **Een weigering is geen protocolfout.** Ze komt terug als toolresultaat met `isError: true` en de volledige fout, zodat het model zijn aanroep verbetert.
+- **Herkomst.** Elke actietool heeft een optioneel argument `intent` ("waarom, in de woorden van de gebruiker"); het modellabel komt uit de clientinformatie. MCP vertelt een server niet welk model belt, dus het label noemt de clienttoepassing.
+- **De toollijst volgt het schema.** Wordt een branch samengevoegd en ontstaat er een surface, dan meldt de server dat de lijst veranderd is.
+- **Twee protocoltijdperken op één server.** Revisie 2026-07-28 schrapte de handshake: elk verzoek draagt zijn eigen versie en clientinformatie. De server bedient die revisie zonder toestand en 2025-11-25 met handshake, per verzoek gekozen. Alle protocoldetails zijn tegen de specificatie gelezen, niet uit het hoofd; waar de specificatie zichzelf tegenspreekt, staat dat in een commentaar bij de keuze.
+
+Niet gebouwd: Streamable HTTP, autorisatie, resources en prompts. De server handelt als één vaste actor die de starter kiest.
+
+## 12. De sandbox en de proef
+
+### Waar door een model geschreven code draait
+
+Het contract maakt een gegenereerde UI onschadelijk voor de database. De sandbox ([`demo/sandbox.js`](../demo/sandbox.js)) maakt ze onschadelijk voor de gebruiker: de pagina draait in een iframe met een eigen, lege origin en een beleid dat geen netwerk toelaat. Haar enige kanaal is `window.surface`, dat via `postMessage` met de gastpagina praat. Die houdt het token; de gegenereerde pagina krijgt het nooit te zien.
+
+`npm run evaluate` begint met een vijandige pagina die zestien uitwegen probeert, en kijkt of er een verzoek de pagina verlaat.
+
+| Poging | Uitkomst |
+|---|---|
+| `fetch`, XHR, WebSocket, `sendBeacon`, afbeelding, stylesheet of script van buiten | tegengehouden door het beleid in het iframe |
+| Formulier versturen, pop-up openen, de bovenste pagina wegnavigeren | tegengehouden |
+| De gastpagina lezen, `localStorage`, cookies | tegengehouden door de lege origin |
+| **Zichzelf wegnavigeren** met gegevens in de URL | lekte in de eerste versie; nu tegengehouden door `frame-src 'none'` op de gastpagina |
+| **WebRTC** via een genest frame | **open** |
+
+De twee vetgedrukte regels zijn gevonden door de sandbox aan te vallen, niet door erover na te denken. Een beleid binnen een document kan dat document niet beletten zichzelf weg te navigeren; alleen de pagina eromheen kan dat verbieden. En WebRTC is de ene netwerk-API die geen enkel beleid dekt: Chromium kent de richtlijn `webrtc` niet, en een opzoeking bij een STUN-server kan gegevens in een hostnaam naar buiten dragen. De constructors worden weggehaald, wat code tegenhoudt die het gewoon probeert, maar een genest frame krijgt ze terug. Dat sluiten vraagt de browser of het netwerk, en de test meldt het als open in plaats van het te verzwijgen.
+
+### De proef
+
+Drie model-agents kregen elk een contract, de beschrijving van `window.surface` ([`demo/generated/BRIEF.md`](../demo/generated/BRIEF.md)) en een vraag van een gebruiker:
+
+| Pagina | De vraag |
+|---|---|
+| `mijn-runs.logboek` | "Ik wil mijn hardlooplogboek zien en bijhouden: een overzicht met mijn totalen en hoe het per maand loopt, al mijn runs, en een nieuwe run kunnen loggen." |
+| `mijn-runs.snel-loggen` | "Ik sta net buiten na het lopen, met mijn telefoon in de hand. Ik wil in een paar tikken mijn run van vandaag loggen en daarna kort zien hoe mijn laatste runs waren." |
+| `knie-en-afstand.analyse` | "Ik heb de laatste tijd last van mijn knie. Hangt dat samen met hoe ver ik loop? Laat me dat zien, en laat me de pijnscore per run verbeteren waar ze niet klopt." |
+
+Uitkomst: alle drie werkten bij de eerste uitvoering, zonder scriptfout, zonder netwerkpoging en zonder één verzoek buiten het contract. Wat de proef leerde:
+
+1. **Functioneel correct lukt uit het contract alleen; visueel correct vraagt een lus.** Twee pagina's hadden een zichtbaar gebrek dat het model niet kon zien omdat het de pagina nooit uitvoerde. Eén ronde feedback in woorden, zonder gegevens, loste beide op. Een echte opstelling heeft dus een stap nodig die de pagina weergeeft en beoordeelt.
+2. **Wat een model moet raden, hoort in het contract.** Alle drie vroegen zich af hoe groepssleutels eruitzien; één vroeg wat een telling telt en of een lege waarde nul is. Dat staat er nu in.
+3. **De taal van de fout is niet de taal van de gebruiker.** Vandaar `reason` en `limit`.
+4. **De twee logboekpagina's liepen tegen dezelfde grens van de surface aan**: afstand en datum zijn na het loggen niet te verbeteren, en een wedstrijd is niet te verwijderen. De modellen meldden het en bouwden er niet omheen. Zo hoort het: de UI stelt de grens niet ter discussie, de eigenaar wel.
+5. **Zekerheid bereikt de UI niet.** De analysepagina is zorgvuldig over kleine aantallen en oorzakelijkheid, maar noemt een verband "duidelijk" op scores die een agent met 40% zekerheid gokte. Ze kon het niet weten: `read()` geeft waarden, geen herkomst.
+
+De grenzen van de proef: drie pagina's, één modelfamilie, met de hand geschreven bedieningsstappen, en de regel "lees alleen deze twee bestanden" was een instructie die de agents bevestigden, geen technische afsluiting.
+
+## 13. Wat een echte motor nog nodig heeft
 
 Dit is een proof of concept. Wat het bewijst is dat het model samenhangt; wat het niet bewijst is dat het schaalt.
 
 1. **Incrementeel onderhouden views.** `subscribe()` leest hier na elke transactie opnieuw. Een echte motor houdt elke surface incrementeel bij; de technieken bestaan (differential dataflow en verwanten), maar niet in combinatie met mogelijkheden per rij.
-2. **Onvervalsbare capabilities.** In de demo komt de actor uit een queryparameter. Een surface hoort een ondertekend, verder in te perken en in te trekken token te zijn dat een UI vasthoudt en kan doorgeven aan een deel-UI met minder rechten.
-3. **Opslag en indexen.** Alles zit in het geheugen en query's lopen alle entiteiten af. De herkomstvelden vragen eigen indexen als terugdraaien op intentie goedkoop moet blijven.
-4. **Goedkope branches op schaal.** Het onderzoek dat de README aanhaalt laat zien dat bestaande systemen kiezen tussen goedkoop afsplitsen en snel werken op een branch. Als elke agentactie een branch is, moet beide.
-5. **Wie schrijft de regels?** De veiligheid is precies zo goed als het schema. Een agent kan regels voorstellen, maar een mens moet ze begrijpen om ze goed te keuren. De diff leesbaar houden is een ontwerpprobleem dat hier nauwelijks aangeraakt is.
-6. **Een rijkere query- en lenstaal.** Geen joins, één type per surface, drie soorten lenzen. Structurele wijzigingen (een attribuut splitsen, een type opdelen) vragen lenzen die hier niet bestaan.
-7. **Zekerheid als eerste-klas begrip.** Nu is `confidence` een label op een transactie. Een surface zou onzekere waarden anders moeten kunnen tonen, en een regel zou erover moeten kunnen spreken ("geen factuur op basis van een gok").
+2. **Herkomst en zekerheid in wat een surface teruggeeft.** Zie punt 5 hierboven. Een surface zou per waarde moeten kunnen zeggen wie ze schreef en hoe zeker, en een regel zou erover moeten kunnen spreken ("geen factuur op basis van een gok").
+3. **Echte identiteit vóór de tokens.** Inloggen is in de demo nagebootst, tokens reizen in de URL en intrekkingen overleven geen herstart.
+4. **Een dichte sandbox.** WebRTC staat open; dat vraagt een browserinstelling of een netwerklaag.
+5. **Opslag die schaalt.** Het journaal is duurzaam maar wordt bij openen helemaal gelezen; query's lopen alle entiteiten af. Er zijn momentopnamen, indexen (ook op herkomst) en vergrendeling nodig.
+6. **Goedkope branches op schaal.** Het onderzoek dat de README aanhaalt laat zien dat bestaande systemen kiezen tussen goedkoop afsplitsen en snel werken op een branch. Als elke agentactie een branch is, moet beide.
+7. **Wie schrijft de regels?** De veiligheid is precies zo goed als het schema. Een agent kan regels voorstellen, maar een mens moet ze begrijpen om ze goed te keuren. De diff leesbaar houden is een ontwerpprobleem dat hier nauwelijks aangeraakt is.
+8. **Een rijkere query- en lenstaal.** Geen joins, één type per surface, drie soorten lenzen. Structurele wijzigingen (een attribuut splitsen, een type opdelen) vragen lenzen die hier niet bestaan.
 
-## 10. Volgende stappen in deze repo
+## 14. Volgende stappen in deze repo
 
-1. Een echte modelgenerator naast de functie in `src/genui.js`, met hetzelfde contract als enige invoer, om te meten hoe vaak een model binnen het contract blijft en hoe goed het de herstelhints gebruikt.
-2. Surfaces als MCP-tools aanbieden: `describe()` als tooldefinitie, `act()` als aanroep.
-3. Capabilities als tokens, met inperken en intrekken.
-4. Het feitenlog op schijf, zodat een demo een herstart overleeft.
+1. De generatielus sluiten: een model dat op het moment van de vraag een pagina schrijft, de weergave beoordeelt en verbetert, in plaats van de drie vooraf geschreven pagina's.
+2. Herkomst en zekerheid opnemen in `read()` en in het contract.
+3. De proef verbreden: meer surfaces, meer modellen, en bedieningsstappen die uit het contract worden afgeleid in plaats van met de hand geschreven.
+4. De MCP-server over Streamable HTTP, met een token als autorisatie.

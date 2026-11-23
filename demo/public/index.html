@@ -29,6 +29,8 @@
   .tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--g-line); }
   .tabs button { padding: 6px 12px; border: 0; background: none; cursor: pointer; color: var(--g-text-2); border-bottom: 2px solid transparent; margin-bottom: -1px; }
   .tabs button[aria-selected="true"] { color: var(--g-text); border-bottom-color: var(--g-accent); font-weight: 600; }
+  #frame { width: 100%; height: 78vh; border: 1px solid var(--g-line); border-radius: 8px; background: var(--g-panel); display: block; }
+  .model-note { margin: 0 0 8px; }
   .world { font-size: 12px; color: var(--g-text-2); margin-bottom: 12px; padding: 6px 10px; border: 1px dashed var(--g-muted); border-radius: 6px; }
   pre { margin: 0; padding: 12px; background: var(--g-panel); border: 1px solid var(--g-line); border-radius: 8px; overflow: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; max-height: 75vh; }
   .steps { display: grid; gap: 6px; }
@@ -68,12 +70,14 @@
   </nav>
 
   <section class="col">
-    <div class="tabs" role="tablist">
-      <button role="tab" data-tab="ui" aria-selected="true">Gegenereerde UI</button>
-      <button role="tab" data-tab="contract" aria-selected="false">Contract</button>
-    </div>
+    <div class="tabs" role="tablist" id="tabs"></div>
     <p class="world" id="world" hidden></p>
     <div id="ui"></div>
+    <div id="model" hidden>
+      <p class="hint model-note">Deze pagina is geschreven door een taalmodel dat alleen het contract van deze surface kreeg, geen gegevens. Ze draait in een sandbox zonder netwerk en zonder opslag; haar enige kanaal naar buiten is deze surface.</p>
+      <iframe id="frame" title="Door een model geschreven UI"></iframe>
+      <p class="hint" id="frame-note"></p>
+    </div>
     <pre id="contract" hidden></pre>
   </section>
 
@@ -99,7 +103,7 @@ document.head.appendChild(Object.assign(document.createElement('style'), { textC
 
 const $ = (selector) => document.querySelector(selector);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const S = { actor: 'user:kim', branch: 'main', surface: null, token: null, world: null, contract: null, stream: null, deferred: null, state: null };
+const S = { actor: 'user:kim', branch: 'main', surface: null, token: null, world: null, contract: null, stream: null, deferred: null, state: null, tab: 'ui', last: null };
 const LEVEL = { additive: 'additief', tightening: 'strenger', breaking: 'brekend' };
 
 async function request(url, body) {
@@ -127,6 +131,11 @@ async function openSurface(name) {
   const contract = await request(surfaceUrl('contract'));
   if (contract.error) { $('#ui').innerHTML = `<p class="hint">${esc(contract.error.message)}</p>`; return; }
   S.contract = contract;
+  S.last = null;
+  const variants = S.state?.surfaces.find((x) => x.name === name)?.variants ?? [];
+  $('#tabs').innerHTML = [['ui', 'Gegenereerd door een functie'], ...variants.map((v) => [`model:${v}`, `Door een model: ${v}`]), ['contract', 'Contract']]
+    .map(([id, label]) => `<button role="tab" data-tab="${esc(id)}">${esc(label)}</button>`).join('');
+  selectTab(S.tab.startsWith('model:') && !variants.includes(S.tab.slice(6)) ? 'ui' : S.tab);
   $('#ui').innerHTML = generateUI(contract);
   $('#contract').textContent = JSON.stringify(contract, null, 2);
 
@@ -137,6 +146,8 @@ async function openSurface(name) {
 
 function bind(result) {
   if (result.error || !S.contract) return;
+  S.last = result;
+  $('#frame').contentWindow?.postMessage({ gendb: 'result', result }, '*');
   const rows = $('#ui [data-slot="rows"]');
   // Do not pull the table out from under someone who is typing in it.
   if (rows.contains(document.activeElement) && document.activeElement.matches('input:not([type=checkbox])')) { S.deferred = result; return; }
@@ -264,12 +275,41 @@ $('#surfaces').addEventListener('click', async (e) => {
   if (button) { await openSurface(button.dataset.surface); refresh(); }
 });
 
-document.querySelector('.tabs').addEventListener('click', (e) => {
-  const tab = e.target.closest('[data-tab]')?.dataset.tab;
-  if (!tab) return;
-  for (const b of document.querySelectorAll('.tabs button')) b.setAttribute('aria-selected', b.dataset.tab === tab);
+// -- a UI written by a model, in its sandbox ----------------------------------------------------------
+// The host keeps the token. The sandboxed page gets the contract, the rows and the outcome of its
+// requests through postMessage, and nothing else.
+
+async function selectTab(tab) {
+  S.tab = tab;
+  for (const b of document.querySelectorAll('#tabs button')) b.setAttribute('aria-selected', b.dataset.tab === tab);
   $('#ui').hidden = tab !== 'ui';
   $('#contract').hidden = tab !== 'contract';
+  $('#model').hidden = !tab.startsWith('model:');
+  const frame = $('#frame');
+  $('#frame-note').textContent = '';
+  if (!tab.startsWith('model:')) { frame.removeAttribute('srcdoc'); return; }
+  const page = await request(surfaceUrl(`generated/${encodeURIComponent(tab.slice(6))}`));
+  if (page.error) { $('#frame-note').textContent = page.error.message; return; }
+  frame.setAttribute('sandbox', S.state.sandbox);
+  frame.srcdoc = page.srcdoc;
+}
+
+$('#tabs').addEventListener('click', (e) => {
+  const tab = e.target.closest('[data-tab]')?.dataset.tab;
+  if (tab) selectTab(tab);
+});
+
+addEventListener('message', async (event) => {
+  const frame = $('#frame');
+  if (event.source !== frame.contentWindow || !event.data) return;
+  const m = event.data;
+  if (m.gendb === 'ready' && S.last) frame.contentWindow.postMessage({ gendb: 'result', result: S.last }, '*');
+  if (m.gendb === 'act') {
+    const outcome = await request(surfaceUrl('act'), { action: m.action, id: m.id, params: m.params, intent: `via model-UI ${S.tab.slice(6)}` });
+    frame.contentWindow.postMessage({ gendb: 'acted', call: m.call, outcome }, '*');
+  }
+  if (m.gendb === 'violation') $('#frame-note').textContent = `De sandbox hield iets tegen: ${m.directive} ${m.blocked}`;
+  if (m.gendb === 'error') $('#frame-note').textContent = `Scriptfout in de gegenereerde pagina: ${m.message}`;
 });
 
 $('#knee').addEventListener('click', async () => { $('#output').innerHTML = ''; await api('/api/agent/knee', {}); });

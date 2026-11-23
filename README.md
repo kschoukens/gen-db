@@ -45,26 +45,55 @@ Dit is hypermedia (HATEOAS) tot in de database doorgetrokken. Dat idee sloeg noo
 
 En één eigenschap die geen applicatie ooit nodig had: **fouten zijn prompts.** Elke weigering heeft een stabiele code, een uitleg en een herstelhint, zodat een model zijn verzoek kan verbeteren zonder dat er een mens tussen zit.
 
+## De proef op de som: blijft een model binnen het contract?
+
+Het hele idee staat of valt met één bewering: dat een model aan het contract genoeg heeft. Dat is gemeten. Drie afzonderlijke model-agents (Claude Opus) kregen elk één contract, een beschrijving van de runtime en een vraag van een gebruiker. Geen gegevens, geen broncode. Elk schreef een volledige pagina, en geen van de drie kon ze uitvoeren.
+
+![Een UI die een model schreef uit alleen het contract, hier op de speculatieve gegevens van een agent](docs/demo-model.png)
+
+`npm run evaluate` draait die pagina's daarna echt: in een sandbox zonder netwerk, tegen een levende database, bediend zoals een gebruiker het zou doen.
+
+| Gegenereerde UI | Verzoeken | Geweigerd | Buiten het contract | Scriptfouten | Netwerkpogingen |
+|---|---|---|---|---|---|
+| `mijn-runs.logboek` (overzicht en loggen) | 2 | 1 | **0** | 0 | 0 |
+| `mijn-runs.snel-loggen` (telefoon, één hand) | 3 | 2 | **0** | 0 | 0 |
+| `knie-en-afstand.analyse` (spreidingsdiagram) | 2 | 1 | **0** | 0 | 0 |
+
+De weigeringen zijn het systeem dat werkt: een gebruiker typte een onmogelijke waarde, de database weigerde, en de UI toonde de reden bij het juiste veld. "Buiten het contract" telt verzoeken met een naam of vorm die het contract niet kent. Dat gebeurde niet één keer.
+
+Wat de proef verder opleverde, en dat is minstens zo nuttig:
+
+- **Twee van de drie pagina's hadden bij de eerste weergave een zichtbaar gebrek** (balken zonder vulling, een scheef formulier op telefoonbreedte). Beide zijn hersteld na één ronde feedback in woorden, zonder dat het model gegevens zag. Functioneel correct uit het contract lukt in één keer; visueel correct vraagt een lus.
+- **De modellen stelden vragen die het contract niet beantwoordde**: wat telt een telling, is een lege waarde nul, hoe zien groepssleutels eruit? Het contract zegt dat nu zelf.
+- **Foutmeldingen van de database zijn Engels en de UI's Nederlands.** Elke schending draagt nu ook een machineleesbare reden en grens, zodat een UI de melding zelf kan verwoorden.
+- **De sandbox lekte.** Een eigen aanvalstest vond dat een gegenereerde pagina zichzelf naar een externe URL kon navigeren, met gegevens in het adres. Dat is gedicht. WebRTC blijft open en staat als bekend lek in de test.
+- **Een UI kan niet zien hoe zeker een waarde is.** De analysepagina noemt een verband "duidelijk" op scores die een agent met 40% zekerheid gokte. De herkomst zit in de database maar nog niet in wat een surface teruggeeft.
+
+Dit is een kleine proef: drie pagina's, één modelfamilie, met de hand geschreven bedieningsstappen. De modellen kregen de opdracht alleen de twee aangereikte bestanden te lezen en bevestigden dat; technisch afgedwongen was het niet. De opdracht staat in [`demo/generated/BRIEF.md`](demo/generated/BRIEF.md), de pagina's zelf ernaast.
+
 ## Zelf proberen
 
 Node 20 of nieuwer, geen afhankelijkheden.
 
 ```bash
-npm test          # 23 tests die elk van de claims hierboven hard maken
+npm test          # 65 tests die de claims hierboven hard maken
 npm run demo      # het hele verhaal in de terminal, in zeven stappen
 npm run serve     # de live demo op http://localhost:4173
+npm run mcp       # dezelfde database als MCP-server over stdio
+npm run evaluate  # de sandbox aanvallen en de model-UI's meten (vraagt Playwright met Chromium)
 ```
 
-In de live demo houdt Kim een hardlooplogboek bij. Er is geen hardloop-app: er is een database die weet wat een run is, en een UI die uit het contract gegenereerd wordt. Probeer dit:
+`GENDB_FILE=./demo.gendb npm run serve` bewaart het feitenlog op schijf: stop de server, start hem opnieuw, en alles is er nog, met geschiedenis en herkomst.
 
-- **Open het tabblad Contract.** Dat is alles wat de generator te zien krijgt.
+In de live demo houdt Kim een hardlooplogboek bij. Er is geen hardloop-app: er is een database die weet wat een run is, en UI's die uit het contract gegenereerd worden. Probeer dit:
+
+- **Open het tabblad Contract.** Dat is alles wat een generator te zien krijgt.
+- **Wissel tussen "Gegenereerd door een functie" en "Door een model".** Dezelfde surface, drie totaal verschillende interfaces, één waarheid. Log een run in de ene en hij staat in de andere.
 - **Klik "Houd ook mijn kniepijn bij".** De agent breidt het schema uit en gokt de pijn voor oude runs uit de notities, met 40% zekerheid, in een eigen wereld. Kies "Eerst bekijken" en je ziet de nieuwe UI op gegevens die in main nog niet bestaan.
 - **Log in als Sam** en probeer het voorstel goed te keuren. Dat mag alleen een eigenaar.
 - **Klik "Ik wil afstanden in meters".** De agent probeert eerst de eenheid te wijzigen, wordt geweigerd, leest de herstelhint en stelt een lens voor. Daarna schrijven twee UI's in twee eenheden naar hetzelfde feit.
 - **Laat een gehallucineerde UI los**: dertien foute pogingen, dertien weigeringen, nul geschreven transacties.
 - **Maak de gok van de agent ongedaan.** Waarden die Kim intussen zelf verbeterd heeft, blijven staan.
-
-De UI-generator in deze demo is bewust een gewone functie ([`src/genui.js`](src/genui.js)) en geen taalmodel. Ze krijgt precies wat een model zou krijgen, en bewijst daarmee dat het contract volstaat. Een echt model zou er een rijkere UI van maken; voor de database verandert er niets.
 
 ## Hoe je het gebruikt
 
@@ -113,12 +142,49 @@ db.merge('agent/kniepijn', { approvedBy: 'user:kim' });   // alleen een eigenaar
 db.undo({ intent: 'kniepijn bijhouden' }, { actor: 'user:kim' });
 ```
 
-Waar je dit voor zou inzetten:
+### Een surface doorgeven: capabilities
+
+Een surface is een bewijs van toegang dat je kunt vasthouden, inperken en doorgeven. Het token is een HMAC-keten: wie het heeft kan er zonder de database een beperking aan toevoegen, niemand kan er een afhalen.
+
+```js
+import { attenuate, inspect } from './src/index.js';
+
+const token = db.grant('mijn-runs', { actor: 'user:kim' });       // server-side, na inloggen
+
+// De UI geeft een deel-UI of een model een smaller token. Geen rondje langs de server.
+const alleenLezen = attenuate(token, { readOnly: true, audience: 'model',
+                                       expires: '2026-12-01T00:00:00Z' });
+
+db.redeem(alleenLezen).read();                  // werkt, persoonsgegevens afgeschermd
+db.redeem(alleenLezen).act('Run.log', { … });   // → NOT_IN_SURFACE
+db.revoke(inspect(token).id, { actor: 'user:kim' });   // trekt het token en alles wat ervan afgeleid is in
+```
+
+### Bewaren: het feitenlog op schijf
+
+```js
+import { Database, fileJournal } from './src/index.js';
+
+const db = new Database({ owners: ['user:kim'], journal: fileJournal('./mijn.gendb') });
+```
+
+Elke wijziging is één regel JSON; openen is die regels opnieuw afspelen. Een samenvoeging is één regel, dus een crash laat alles of niets achter.
+
+### Voor agents: elke surface is een MCP-tool
+
+```js
+import { createMcpServer } from './src/index.js';
+
+const server = createMcpServer(db, { actor: 'user:kim' });
+```
+
+Een surface beschrijft zichzelf al volledig, en dat is precies wat een tooldefinitie vraagt. Per surface komt er een leestool en één tool per actie, met een invoerschema dat uit het contract is afgeleid. Een weigering van de database komt terug als toolresultaat met code en herstelhint, zodat het model zichzelf verbetert. De server spreekt MCP-revisie 2026-07-28 (zonder handshake) en 2025-11-25.
+
+### Waarvoor je dit zou inzetten
 
 - **Persoonlijk: één levensdatabase, eindeloos veel wegwerp-UI's.** Je vraagt vandaag een overzicht van je trainingen en volgende week of je kniepijn samenhangt met afstand. Het zijn twee gegenereerde interfaces op dezelfde feiten, en de tweede bestaat alleen omdat een agent het schema op jouw vraag mocht laten groeien.
 - **Zakelijk: interne tools zonder backlog.** Elke medewerker laat zijn eigen scherm genereren op dezelfde beheerde gegevens. Wat mag en wat klopt, is één keer vastgelegd in de database en geldt voor elk scherm dat ooit nog gegenereerd wordt.
 - **Meerdere agents: samenwerken via werelden in plaats van berichten.** Elke agent werkt in een branch; de diff met herkomst en zekerheid is het overdrachtsdocument.
-- **Als MCP-server.** Elke surface is vanzelf een tool met een volledig schema: `describe` wordt de tooldefinitie, `act` de aanroep. Dat is de natuurlijke volgende stap voor deze repo.
 
 ## Wat bestaat al, en wat is nieuw
 
@@ -132,24 +198,29 @@ Bijna elk onderdeel bestaat los. Nieuw is dat ze samen één primitief vormen wa
 | Lenzen | [Cambria](https://inkandswitch.com/cambria) (Ink & Switch) | Bedacht voor local-first software; niet ingebouwd in een database waar agents het schema laten groeien |
 | Live queries | Convex, InstantDB, Electric | Leveren gegevens, geen mogelijkheden per rij |
 | Rechten op rijniveau | Postgres RLS | Beschermt lezen en schrijven, maar beschrijft zichzelf niet aan de client |
+| Inperkbare tokens | Macaroons | Bestaan voor API's; niet als iets wat een database uitgeeft voor een stuk van zichzelf |
 | UI-protocollen | [A2UI](https://developers.googleblog.com/en/a2ui-and-mcp-apps/), MCP Apps, AG-UI | Regelen hoe een agent een UI aanlevert. De database blijft een tool erachter; wat er veilig mee kan, zit nog steeds in handgeschreven code |
 
 Het dichtst bij de probleemstelling komt het Berkeley-artikel *Supporting Our AI Overlords: Redesigning Data Systems to be Agent-First* (2025), dat de eisen van agents aan databases beschrijft. GenDB voegt daar de andere helft aan toe: niet de agent die de database bevraagt, maar de mens die door een gegenereerde interface heen met zijn gegevens werkt.
 
 ## Wat dit niet is
 
-Een proof of concept van ongeveer 1.500 regels, alles in het geheugen, bedoeld om het idee te toetsen en niet om er gegevens aan toe te vertrouwen. Wat een echte motor nog nodig heeft, staat in [docs/ontwerp.md](docs/ontwerp.md): incrementeel onderhouden views, onvervalsbare capabilities, opslag, en een antwoord op de vraag wie de regels schrijft.
+Een proof of concept van ongeveer 2.600 regels, bedoeld om het idee te toetsen en niet om er gegevens aan toe te vertrouwen. Inloggen is nagebootst, tokens reizen in de URL, intrekkingen leven alleen in het geheugen, er zijn geen joins en geen indexen, en het journaal kent geen vergrendeling of compactie. Wat een echte motor nog nodig heeft, staat in [docs/ontwerp.md](docs/ontwerp.md).
 
 ## Wegwijzer
 
 | Bestand | Inhoud |
 |---|---|
 | [`src/surface.js`](src/surface.js) | De surface: contract, lezen met mogelijkheden per rij, handelen, live volgen, lezen binnen een tokenbudget |
+| [`src/capability.js`](src/capability.js) | Surfaces als tokens: uitgeven, inperken, controleren |
 | [`src/schema.js`](src/schema.js) | Het schema als feiten, de indeling additief / strenger / brekend, lenzen |
 | [`src/db.js`](src/db.js) | Rechten, schrijven, werelden beoordelen en samenvoegen, ongedaan maken op herkomst |
-| [`src/store.js`](src/store.js) | Het feitenlog: transacties, branches, tijdreizen |
+| [`src/store.js`](src/store.js), [`src/journal.js`](src/journal.js) | Het feitenlog: transacties, branches, tijdreizen, en hetzelfde op schijf |
+| [`src/mcp.js`](src/mcp.js) | Surfaces als MCP-tools |
 | [`src/validate.js`](src/validate.js), [`src/errors.js`](src/errors.js) | Validatie en fouten met herstelhints |
 | [`src/expr.js`](src/expr.js) | De expressietaal voor regels, voorwaarden en filters: JSON, geen code |
-| [`src/genui.js`](src/genui.js) | De plaatsvervanger voor het model: van contract naar UI |
-| [`demo/`](demo/) | Het scenario, het verhaal voor de terminal en de live demo |
+| [`src/genui.js`](src/genui.js) | Een gewone functie die van een contract een UI maakt: de ondergrens van wat het contract mogelijk maakt |
+| [`demo/generated/`](demo/generated/) | Drie UI's die een model schreef, met de opdracht die het kreeg |
+| [`demo/sandbox.js`](demo/sandbox.js), [`demo/evaluate.js`](demo/evaluate.js) | De sandbox voor door een model geschreven code, en de meting |
+| [`demo/`](demo/) | Het scenario, het verhaal voor de terminal, de live demo en de MCP-server |
 | [`docs/ontwerp.md`](docs/ontwerp.md) | Het ontwerp in detail, de keuzes en de open vragen |
