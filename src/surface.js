@@ -14,6 +14,7 @@
 // clients, because they hard-coded their knowledge anyway. A model is the first client that can
 // actually read a self-describing response and build the right thing from it.
 
+import { narrow } from './capability.js';
 import { GenDBError, didYouMean } from './errors.js';
 import { evaluate, explain } from './expr.js';
 import { runQuery, summarize } from './query.js';
@@ -32,20 +33,35 @@ const unavailable = (action) => action.otherwise ?? `requires ${explain(action.w
 export const estimateTokens = (value) => Math.ceil(JSON.stringify(value).length / 4);
 
 export class Surface {
-  constructor(db, name, { actor, branch = 'main' }) {
+  // Set only when the surface was opened from a token (db.redeem): the token's caveats, and a check
+  // that it is still unexpired and unrevoked. Private, and the handle is frozen, so it cannot be widened.
+  #caveats;
+  #guard;
+
+  constructor(db, name, { actor, branch = 'main', caveats = [], guard } = {}) {
     this.db = db;
     this.name = name;
     this.actor = actor;
     this.branch = branch;
+    this.#caveats = Object.freeze([...caveats]);
+    this.#guard = guard;
+    Object.freeze(this);
     this._load(); // fail on open, not on first use
   }
 
-  /** Resolved on every call: schema and grants can change underneath a long-lived UI. */
+  /** Resolved on every call: schema, grants and the token itself can change underneath a long-lived UI. */
   _load(asOf) {
+    this.#guard?.();
     const schema = this.db.schema(this.branch, asOf);
     const def = schema.surfaces.get(this.name);
-    const granted = this.db.surfaces({ actor: this.actor, branch: this.branch }).map((s) => s.name);
-    if (!def || !grantsActor(def.grants, this.actor)) {
+    // Grants are checked against the present too when reading the past: losing a surface loses its history.
+    const live = asOf === undefined || asOf === null ? def : this.db.schema(this.branch).surfaces.get(this.name);
+    if (!def || !live || !grantsActor(def.grants, this.actor) || !grantsActor(live.grants, this.actor)) {
+      if (this.#guard) {
+        // A token may have been handed on: its holder learns nothing about the issuer's other surfaces.
+        throw new GenDBError('NOT_GRANTED', `This token no longer opens surface "${this.name}".`, { repair: 'Ask whoever gave you the token for a new one.' });
+      }
+      const granted = this.db.surfaces({ actor: this.actor, branch: this.branch }).map((s) => s.name);
       // Deliberately the same answer for "does not exist" and "not for you".
       throw new GenDBError('NOT_GRANTED', `${this.actor} has no surface "${this.name}" on "${this.branch}".`, {
         granted,
@@ -53,7 +69,8 @@ export class Surface {
         repair: granted.length ? `Open one of: ${granted.join(', ')}. For anything else, ask an owner for a new surface.` : 'Ask an owner to grant a surface.',
       });
     }
-    return { def, schema, state: this.db.store.stateAt(this.branch, asOf), ctx: this.db._ctx(this.actor) };
+    const { def: narrowed, audience } = narrow(def, this.#caveats, (name) => schema.actions.get(name));
+    return { def: narrowed, audience, schema, state: this.db.store.stateAt(this.branch, asOf), ctx: this.db._ctx(this.actor) };
   }
 
   _field(schema, attr, extra = {}) {
@@ -123,6 +140,7 @@ export class Surface {
   read({ asOf, audience = 'ui', budget } = {}) {
     const loaded = this._load(asOf);
     const { def, schema, state, ctx } = loaded;
+    if (loaded.audience) audience = loaded.audience; // a token for a model is redacted whatever the caller asks
     const all = this._rows(loaded);
 
     const value = (row, attr) => {

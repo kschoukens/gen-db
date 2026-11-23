@@ -3,8 +3,21 @@
 //
 //   node demo/server.js        then open http://localhost:4173
 //
-// Demo only: the acting user comes from a query parameter. A real deployment would hand each
-// generated UI an unforgeable capability for its surface instead.
+// What is real and what is not:
+//
+//   Real      the surface endpoints (contract, stream, act) take a token and nothing else. The
+//             token is a signed capability (src/capability.js): it names the surface, actor and
+//             branch, cannot be forged or widened, and is checked again on every request.
+//   Not real  logging in. /api/state mints tokens for whichever actor the `?actor=` query parameter
+//             names, so anyone who can reach this server can get a token for anyone. In a real
+//             deployment that step sits behind authentication, and minting is db.grant() there.
+//   Not real  the owner and agent console (merge, discard, undo, agent steps, hallucinate, reset)
+//             still trusts `?actor=` as an explicit demo shortcut, and the agent steps act with
+//             privileged calls on the server, not through tokens.
+//
+// Tokens travel in the query string because EventSource cannot set headers; that puts them in
+// server logs and browser history, which a real deployment would avoid. The secret is random per
+// database, so "Opnieuw beginnen" (reset) invalidates every token handed out before it.
 
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -49,7 +62,8 @@ function state(actor, branch) {
     actors: [KIM, SAM],
     owners: [...db.owners],
     branches,
-    surfaces: db.surfaces({ actor, branch }),
+    // The demo's stand-in for a login: whoever the page says it is gets a fresh token per surface.
+    surfaces: db.surfaces({ actor, branch }).map((s) => ({ ...s, token: db.grant(s.name, { actor, branch }) })),
     reviews: branches.filter((b) => b.parent && b.status === 'open').map((b) => db.review(b.name)),
     log: db.log({ branch, limit: 12 }),
     canUndoKnee: db.log({ branch: 'main', limit: 1000 }).some((tx) => tx.intent === KNEE_INTENT && tx.kind !== 'schema')
@@ -57,11 +71,20 @@ function state(actor, branch) {
   };
 }
 
+/** The surface a token opens. The name in the path is only for readable URLs; it must match the token. */
+function redeem(name, token) {
+  const surface = db.redeem(token);
+  if (surface.name !== name) {
+    throw new GenDBError('NOT_GRANTED', `This token does not open surface "${name}".`, { repair: `Use it at /api/surfaces/${surface.name}/….` });
+  }
+  return surface;
+}
+
 const routes = [
   ['GET', /^\/api\/state$/, ({ actor, branch }) => state(actor, branch)],
-  ['GET', /^\/api\/surfaces\/([^/]+)\/contract$/, ({ actor, branch, m }) => db.open(m[1], { actor, branch }).describe()],
-  ['POST', /^\/api\/surfaces\/([^/]+)\/act$/, ({ actor, branch, m, input }) =>
-    db.open(m[1], { actor, branch }).act(input.action, { id: input.id, params: input.params }, { intent: input.intent })],
+  ['GET', /^\/api\/surfaces\/([^/]+)\/contract$/, ({ token, m }) => redeem(m[1], token).describe()],
+  ['POST', /^\/api\/surfaces\/([^/]+)\/act$/, ({ token, m, input }) =>
+    redeem(m[1], token).act(input.action, { id: input.id, params: input.params }, { intent: input.intent })],
   ['POST', /^\/api\/agent\/knee$/, () => agentKneePain(db)],
   ['POST', /^\/api\/agent\/metres$/, () => agentMetres(db)],
   ['POST', /^\/api\/hallucinate$/, () => hallucinatedUI(db)],
@@ -75,6 +98,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const actor = url.searchParams.get('actor') ?? KIM;
   const branch = url.searchParams.get('branch') ?? 'main';
+  const token = url.searchParams.get('token');
 
   try {
     if (FILES[url.pathname]) {
@@ -90,15 +114,22 @@ const server = http.createServer(async (req, res) => {
     const stream = url.pathname.match(/^\/api\/surfaces\/([^/]+)\/stream$/);
     if (stream) {
       const name = decodeURIComponent(stream[1]);
-      db.open(name, { actor, branch }); // refuse before the stream starts
-      return sse(req, res, (send) => db.open(name, { actor, branch }).subscribe(send));
+      redeem(name, token); // refuse before the stream starts
+      return sse(req, res, (send) => {
+        // Also runs again after a reset, when the token belongs to the old database: report, do not throw.
+        try { return redeem(name, token).subscribe(send); } catch (err) {
+          if (!(err instanceof GenDBError)) throw err;
+          send(err.toJSON());
+          return () => {};
+        }
+      });
     }
 
     for (const [method, pattern, handler] of routes) {
       const m = url.pathname.match(pattern);
       if (m && req.method === method) {
         const input = method === 'POST' ? await body(req) : {};
-        return json(res, 200, await handler({ actor, branch, m: m.map(decodeURIComponent), input }));
+        return json(res, 200, await handler({ actor, branch, token, m: m.map(decodeURIComponent), input }));
       }
     }
     json(res, 404, { ok: false, error: { code: 'NOT_FOUND', message: `No route ${req.method} ${url.pathname}.` } });
