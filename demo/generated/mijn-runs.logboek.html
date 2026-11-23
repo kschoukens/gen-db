@@ -1,0 +1,933 @@
+<!doctype html>
+<html lang="nl-BE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mijn runs</title>
+<style>
+:root{
+  color-scheme: light dark;
+  --bg:#f5f4ef; --surface:#ffffff; --surface-2:#faf9f5; --text:#1c1f1b; --muted:#5f655c;
+  --line:#e2e0d8; --line-strong:#cfccc1;
+  --accent:#1d7550; --accent-hover:#175f41; --accent-weak:#e2f0e8; --on-accent:#ffffff;
+  --bar:#2f9467; --bar-track:#ecebe4;
+  --danger:#b3261e; --danger-hover:#951f19; --danger-weak:#fbeae8; --on-danger:#ffffff;
+  --race:#8a5a00; --race-weak:#fbf0d6;
+  --focus:#2563eb; --ok-text:#1d7550;
+  --radius:14px; --radius-s:9px;
+  --shadow:0 1px 2px rgba(20,20,10,.05), 0 2px 10px rgba(20,20,10,.04);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#111311; --surface:#1a1d1a; --surface-2:#161916; --text:#e8ebe5; --muted:#a1a89e;
+    --line:#2c312c; --line-strong:#3c423b;
+    --accent:#5cc28f; --accent-hover:#79d1a4; --accent-weak:#1d3529; --on-accent:#0b1a12;
+    --bar:#4fb683; --bar-track:#262b26;
+    --danger:#ff8c82; --danger-hover:#ffa79f; --danger-weak:#3a1d1a; --on-danger:#2a0c09;
+    --race:#f0c060; --race-weak:#3a2f14;
+    --focus:#8ab4ff; --ok-text:#79d1a4;
+    --shadow:none;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  overflow-x:hidden}
+.wrap{max-width:1120px;margin:0 auto;padding:20px 16px 48px}
+h1,h2,h3{margin:0;line-height:1.2}
+h1{font-size:1.6rem;letter-spacing:-.01em}
+h2{font-size:1.08rem}
+.sub{margin:4px 0 0;color:var(--muted)}
+.vh{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;min-width:0}
+.card-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.card-head p{margin:0;color:var(--muted);font-size:.88rem}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+/* Summary */
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);min-width:0}
+.tile .k{color:var(--muted);font-size:.85rem}
+.tile .v{font-size:1.7rem;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:-.01em;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .v small{font-size:.95rem;font-weight:500;color:var(--muted);margin-left:3px}
+@media (max-width:520px){
+  .tiles{gap:8px}
+  .tile{padding:10px 12px}
+  .tile .v{font-size:1.25rem}
+  .tile .v small{font-size:.8rem}
+  .tile .k{font-size:.78rem}
+}
+
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:820px){.cols{grid-template-columns:minmax(0,1fr)}}
+
+/* Months */
+.months{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.month{display:grid;grid-template-columns:minmax(90px,8.5em) minmax(0,1fr);gap:4px 12px;align-items:center;width:100%;
+  text-align:left;background:none;border:1px solid transparent;border-radius:var(--radius-s);padding:8px 10px;color:inherit;font:inherit}
+button.month{cursor:pointer}
+button.month:hover{background:var(--surface-2);border-color:var(--line)}
+button.month[aria-pressed="true"]{background:var(--accent-weak);border-color:var(--accent)}
+.month .m-name{font-weight:600;text-transform:capitalize}
+.month .m-bar{display:flex;align-items:center;gap:10px;min-width:0}
+.track{flex:1;height:10px;border-radius:6px;background:var(--bar-track);overflow:hidden;min-width:30px}
+.fill{height:100%;background:var(--bar);border-radius:6px;min-width:2px}
+.m-val{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap;min-width:5.5em;text-align:right}
+.m-meta{grid-column:2;color:var(--muted);font-size:.84rem;font-variant-numeric:tabular-nums}
+@media (max-width:420px){
+  .month{grid-template-columns:minmax(0,1fr)}
+  .m-meta{grid-column:1}
+}
+
+/* Form */
+form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 14px}
+.fld{display:flex;flex-direction:column;gap:5px;min-width:0}
+.fld.span2{grid-column:1 / -1}
+@media (max-width:400px){form{grid-template-columns:minmax(0,1fr)}.fld{grid-column:1 / -1}}
+label,.legend{font-weight:600;font-size:.9rem}
+.opt{font-weight:400;color:var(--muted)}
+input[type=text],input[type=date],select{
+  width:100%;min-width:0;font:inherit;color:var(--text);background:var(--surface);
+  border:1px solid var(--line-strong);border-radius:var(--radius-s);padding:9px 11px;min-height:42px}
+input:hover,select:hover{border-color:var(--muted)}
+input[aria-invalid="true"],select[aria-invalid="true"],.seg[aria-invalid="true"]{border-color:var(--danger)}
+input:disabled,select:disabled{opacity:.6}
+.unit-wrap{position:relative;display:flex}
+.unit-wrap input{padding-right:46px}
+.unit{position:absolute;right:11px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;font-size:.9rem}
+.hint{color:var(--muted);font-size:.82rem;margin:0}
+.err{color:var(--danger);font-size:.84rem;margin:0}
+.err:empty{display:none}
+.err .repair{display:block;color:var(--text);opacity:.85}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+.seg{display:flex;border:1px solid var(--line-strong);border-radius:var(--radius-s);overflow:hidden;margin-top:5px}
+.seg label{flex:1;position:relative;font-weight:500;text-align:center;cursor:pointer;min-width:0}
+.seg label+label{border-left:1px solid var(--line-strong)}
+.seg input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.seg span{display:block;padding:9px 4px;min-height:40px;text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seg input:checked+span{background:var(--accent-weak);color:var(--text);font-weight:650;box-shadow:inset 0 -3px 0 var(--accent)}
+.seg input:focus-visible+span{outline:2px solid var(--focus);outline-offset:-3px}
+.check{display:flex;gap:10px;align-items:flex-start;font-weight:600;cursor:pointer}
+.check input{width:20px;height:20px;margin:1px 0 0;accent-color:var(--accent);flex:none}
+.count{font-variant-numeric:tabular-nums}
+.count.over{color:var(--danger)}
+.form-foot{grid-column:1 / -1;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.preview{color:var(--muted);font-size:.88rem;font-variant-numeric:tabular-nums}
+.form-msg{grid-column:1 / -1;margin:0;border-radius:var(--radius-s);padding:10px 12px;font-size:.9rem}
+.form-msg:empty{display:none}
+.form-msg.bad{background:var(--danger-weak);color:var(--danger)}
+.form-msg.bad .repair{display:block;color:var(--text)}
+.form-msg.good{background:var(--accent-weak);color:var(--ok-text)}
+
+.btn{font:inherit;font-weight:600;border-radius:var(--radius-s);padding:9px 16px;min-height:42px;cursor:pointer;border:1px solid transparent}
+.btn-primary{background:var(--accent);color:var(--on-accent)}
+.btn-primary:hover{background:var(--accent-hover)}
+.btn-ghost{background:transparent;color:var(--text);border-color:var(--line-strong)}
+.btn-ghost:hover{background:var(--surface-2)}
+.btn-danger-quiet{background:transparent;color:var(--danger);border-color:transparent;padding:6px 10px;min-height:36px}
+.btn-danger-quiet:hover:not(:disabled){background:var(--danger-weak)}
+.btn-danger{background:var(--danger);color:var(--on-danger)}
+.btn-danger:hover{background:var(--danger-hover)}
+.btn:disabled{cursor:not-allowed;opacity:.55}
+.btn[aria-busy="true"]{opacity:.7;cursor:progress}
+.btn-sm{min-height:34px;padding:5px 12px;font-size:.88rem}
+
+/* Runs */
+.runs-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-bottom:6px}
+.runs-head .meta{color:var(--muted);font-size:.88rem}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--accent-weak);border-radius:999px;padding:3px 4px 3px 12px;font-size:.86rem}
+.chip span{text-transform:capitalize}
+.chip button{font:inherit;font-size:.82rem;border:0;background:var(--surface);color:var(--text);border-radius:999px;padding:3px 10px;cursor:pointer}
+.runs{list-style:none;margin:0;padding:0}
+.run{display:grid;grid-template-columns:minmax(150px,1.1fr) minmax(220px,1.4fr) minmax(0,2.2fr) auto;gap:10px 18px;align-items:start;
+  padding:14px 4px;border-top:1px solid var(--line)}
+.run:first-child{border-top:0}
+.run.removing{opacity:.45}
+.r-date time{font-weight:650;display:block}
+.r-date .dow{color:var(--muted);font-size:.85rem;text-transform:capitalize}
+.badge{display:inline-block;margin-top:4px;font-size:.76rem;font-weight:650;color:var(--race);background:var(--race-weak);border-radius:999px;padding:1px 9px}
+.stats{display:grid;grid-template-columns:repeat(3,auto);justify-content:start;gap:0 18px;margin:0}
+.stats div{min-width:0}
+.stats dt{color:var(--muted);font-size:.76rem}
+.stats dd{margin:0;font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+.stats .big{font-size:1.15rem}
+.edits{display:grid;grid-template-columns:minmax(96px,9em) minmax(0,1fr);gap:8px 10px;min-width:0}
+.edits .lab-row{display:flex;justify-content:space-between;gap:6px;font-size:.76rem}
+.edits .lab-row label{font-size:.76rem;font-weight:500;color:var(--muted)}
+.edits select,.edits input[type=text]{min-height:36px;padding:6px 9px;font-size:.92rem}
+.edits input[type=text]{background:transparent;border-color:var(--line)}
+.edits input[type=text]:hover{border-color:var(--line-strong)}
+.edits input[type=text]:focus{background:var(--surface)}
+.status{font-weight:500;color:var(--muted)}
+.status.saved{color:var(--ok-text)}
+.status.bad{color:var(--danger)}
+.edit-off{grid-column:1 / -1;color:var(--muted);font-size:.82rem;margin:0}
+.r-act{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:0;max-width:220px}
+.reason{color:var(--muted);font-size:.8rem;text-align:right;margin:0}
+.confirm{grid-column:1 / -1;display:flex;flex-wrap:wrap;align-items:center;gap:10px;background:var(--danger-weak);border-radius:var(--radius-s);padding:10px 12px}
+.confirm p{margin:0;flex:1 1 220px;font-size:.9rem}
+.confirm .btns{display:flex;gap:8px}
+.r-err{grid-column:1 / -1}
+@media (max-width:900px){
+  .run{grid-template-columns:minmax(0,1fr) auto;}
+  .r-date{grid-column:1}
+  .r-act{grid-column:2;grid-row:1}
+  .stats{grid-column:1 / -1}
+  .edits{grid-column:1 / -1}
+}
+@media (max-width:420px){
+  .edits{grid-template-columns:minmax(0,1fr)}
+  .stats{gap:0 14px}
+}
+.empty{color:var(--muted);text-align:center;padding:26px 8px;margin:0}
+.loading{color:var(--muted)}
+.section-gap{margin-top:16px}
+.fatal{background:var(--danger-weak);color:var(--danger);border-radius:var(--radius);padding:14px 16px;margin-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="title">Mijn runs</h1>
+    <p class="sub" id="intent"></p>
+  </header>
+
+  <div id="fatal" class="fatal" hidden></div>
+
+  <section aria-labelledby="tiles-h">
+    <h2 id="tiles-h" class="vh">Totalen</h2>
+    <div class="tiles" id="tiles" aria-busy="true"></div>
+  </section>
+
+  <div class="cols">
+    <section class="card" id="log-card" aria-labelledby="log-h">
+      <div class="card-head"><h2 id="log-h"></h2><p id="log-desc"></p></div>
+      <form id="log-form" novalidate></form>
+    </section>
+
+    <section class="card" id="month-card" aria-labelledby="month-h">
+      <div class="card-head"><h2 id="month-h">Per maand</h2><p id="month-hint"></p></div>
+      <div id="months"><p class="loading">Laden…</p></div>
+    </section>
+  </div>
+
+  <section class="card section-gap" aria-labelledby="runs-h">
+    <div class="runs-head">
+      <h2 id="runs-h">Alle runs</h2>
+      <span class="meta" id="runs-meta"></span>
+      <span id="filter-chip"></span>
+    </div>
+    <ol class="runs" id="runs"></ol>
+    <p class="empty" id="runs-empty">Laden…</p>
+  </section>
+
+  <div class="vh" aria-live="polite" id="live"></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- Contract ---------- */
+  var S = window.surface;
+  var C = (S && S.contract) || {};
+  var FIELDS = Array.isArray(C.fields) ? C.fields : [];
+  var F = {}; FIELDS.forEach(function (f) { F[f.name] = f; });
+  var ACTIONS = Array.isArray(C.actions) ? C.actions : [];
+  function findAction(pred) { for (var i = 0; i < ACTIONS.length; i++) if (pred(ACTIONS[i])) return ACTIONS[i]; return null; }
+  var A_LOG = findAction(function (a) { return a.kind === 'create' && a.scope === 'collection'; });
+  var A_DEL = findAction(function (a) { return a.kind === 'delete' && a.scope === 'row'; });
+  var A_EDIT = findAction(function (a) { return a.name === '$edit'; });
+  var EDIT_PARAMS = (A_EDIT && A_EDIT.params) || [];
+  var ATTR = {};
+  FIELDS.forEach(function (f) { if (f.attr) ATTR[f.attr] = f.name; });
+  ACTIONS.forEach(function (a) { (a.params || []).forEach(function (p) { if (p.attr && !ATTR[p.attr]) ATTR[p.attr] = p.name; }); });
+
+  var SUM = C.summary || null;
+  var MEASURES = (SUM && Array.isArray(SUM.measures)) ? SUM.measures : [];
+  function measure(pred) { for (var i = 0; i < MEASURES.length; i++) if (pred(MEASURES[i])) return MEASURES[i]; return null; }
+  var M_PRIMARY = measure(function (m) { return m.fn === 'sum'; }) || MEASURES[0] || null;
+
+  var FD = F.date ? 'date' : null;
+  var FKM = F.distance_km ? 'distance_km' : null;
+  var FMIN = F.minutes ? 'minutes' : null;
+  var FRACE = (F.race && F.race.type === 'boolean') ? 'race' : null;
+
+  /* ---------- Helpers ---------- */
+  function $(id) { return document.getElementById(id); }
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (!Object.prototype.hasOwnProperty.call(attrs, k) || attrs[k] == null || attrs[k] === false) continue;
+      if (k === 'class') n.className = attrs[k];
+      else if (k === 'text') n.textContent = attrs[k];
+      else if (k.slice(0, 2) === 'on') n.addEventListener(k.slice(2), attrs[k]);
+      else if (attrs[k] === true) n.setAttribute(k, '');
+      else n.setAttribute(k, attrs[k]);
+    }
+    (kids || []).forEach(function (c) { if (c == null) return; n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return n;
+  }
+  var uid = 0; function nid(p) { uid += 1; return (p || 'x') + '-' + uid; }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function todayISO() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  var nfCache = {};
+  function num(v, maxFd) {
+    var k = maxFd == null ? 2 : maxFd;
+    if (!nfCache[k]) nfCache[k] = new Intl.NumberFormat('nl-BE', { maximumFractionDigits: k });
+    return nfCache[k].format(v);
+  }
+  function isNum(v) { return typeof v === 'number' && isFinite(v); }
+  function withUnit(v, unit, maxFd) { return isNum(v) ? num(v, maxFd) + (unit ? ' ' + unit : '') : '—'; }
+  function parseDate(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || '');
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+  }
+  function fmtDate(s, opts) { var d = parseDate(s); return d ? d.toLocaleDateString('nl-BE', opts) : (s ? String(s) : '—'); }
+  var MONTH_RE = /^(\d{4})-(\d{2})$/;
+  function monthLabel(key) {
+    var m = MONTH_RE.exec(key == null ? '' : String(key));
+    if (!m) return key == null || key === '' ? 'Onbekend' : String(key);
+    return new Date(+m[1], +m[2] - 1, 1).toLocaleDateString('nl-BE', { month: 'long', year: 'numeric' });
+  }
+  function paceText(min, km) {
+    if (!isNum(min) || !isNum(km) || km <= 0 || min <= 0) return null;
+    var s = Math.round(min / km * 60);
+    return Math.floor(s / 60) + ':' + pad(s % 60) + ' /km';
+  }
+  function durationText(min, unit) {
+    if (!isNum(min)) return '—';
+    if (min < 60) return withUnit(min, unit || 'min', 1);
+    var h = Math.floor(min / 60), r = Math.round((min - h * 60) * 10) / 10;
+    return h + ' u' + (r ? ' ' + num(r, 1) + ' ' + (unit || 'min') : '');
+  }
+  function cap(s) { s = String(s); return s.charAt(0).toUpperCase() + s.slice(1); }
+  function parseNum(s) {
+    s = String(s == null ? '' : s).replace(/\s/g, '').replace(',', '.');
+    if (s === '') return null;
+    if (!/^-?(\d+(\.\d*)?|\.\d+)$/.test(s)) return NaN;
+    return parseFloat(s);
+  }
+  function numForInput(v) { return isNum(v) ? String(v).replace('.', ',') : ''; }
+  function announce(msg) { var l = $('live'); l.textContent = ''; setTimeout(function () { l.textContent = msg; }, 30); }
+  function unitOf(name) { return F[name] && F[name].unit; }
+
+  /* Field error rendering, shared by the log form and in-place edits */
+  function clearFieldError(slot) {
+    if (!slot) return;
+    slot.err.textContent = '';
+    slot.controls.forEach(function (c) { c.removeAttribute('aria-invalid'); });
+  }
+  function addFieldError(slot, message, repair) {
+    var p = el('span', { style: 'display:block' }, [message || 'Deze waarde is niet geldig.']);
+    if (repair) p.appendChild(el('span', { class: 'repair', text: 'Oplossing: ' + repair }));
+    slot.err.appendChild(p);
+    slot.controls.forEach(function (c) { c.setAttribute('aria-invalid', 'true'); });
+  }
+  /* Distributes an error over field slots; returns what could not be placed next to a field. */
+  function placeError(error, slots) {
+    var left = [];
+    var vs = (error && Array.isArray(error.violations)) ? error.violations : [];
+    vs.forEach(function (v) {
+      var names = v.field ? [v.field] : (v.attributes || []).map(function (a) { return ATTR[a]; });
+      names = names.filter(function (n, i) { return n && slots[n] && names.indexOf(n) === i; });
+      if (!names.length) { left.push(v); return; }
+      names.forEach(function (n) { addFieldError(slots[n], v.message, v.repair); });
+    });
+    return { placed: vs.length - left.length, left: left };
+  }
+  function errorBlock(error, left) {
+    var box = document.createDocumentFragment();
+    var items = left && left.length ? left : null;
+    if (items) {
+      items.forEach(function (v) {
+        var d = el('span', { style: 'display:block' }, [v.message || error.message || 'De database weigerde dit.']);
+        if (v.repair) d.appendChild(el('span', { class: 'repair', text: 'Oplossing: ' + v.repair }));
+        box.appendChild(d);
+      });
+    } else {
+      box.appendChild(el('span', { style: 'display:block' }, [(error && error.message) || 'De database weigerde dit.']));
+      if (error && error.repair) box.appendChild(el('span', { class: 'repair', text: 'Oplossing: ' + error.repair }));
+    }
+    if (error && Array.isArray(error.didYouMean) && error.didYouMean.length) {
+      box.appendChild(el('span', { class: 'repair', text: 'Bedoelde je: ' + error.didYouMean.join(', ') + '?' }));
+    }
+    return box;
+  }
+  function networkError(e) {
+    return { message: 'Er ging iets mis bij het versturen.', repair: 'Probeer het opnieuw.' + (e && e.message ? ' (' + e.message + ')' : '') };
+  }
+
+  /* ---------- Header ---------- */
+  if (C.label) { $('title').textContent = C.label; document.title = C.label; }
+  $('intent').textContent = C.intent || (C.entity && C.entity.description) || '';
+  if (SUM && SUM.by && SUM.by.label) $('month-h').textContent = SUM.by.label;
+
+  if (!S || typeof S.subscribe !== 'function') {
+    var fe = $('fatal'); fe.hidden = false;
+    fe.textContent = 'De gegevens zijn niet beschikbaar: er is geen verbinding met het logboek.';
+  }
+
+  /* ---------- Log form ---------- */
+  var form = $('log-form');
+  var formSlots = {};
+  var formMsg, submitBtn, previewEl;
+
+  function buildForm() {
+    if (!A_LOG) {
+      $('log-card').hidden = true;
+      return;
+    }
+    $('log-h').textContent = A_LOG.label || 'Nieuwe run';
+    $('log-desc').textContent = A_LOG.description || '';
+    var params = A_LOG.params || [];
+    params.forEach(function (p) {
+      var id = nid('f-' + p.name), errId = id + '-err', hintId = id + '-hint';
+      var optional = !p.required ? el('span', { class: 'opt', text: ' (optioneel)' }) : null;
+      var wrap, controls = [], hint = null, errEl = el('p', { class: 'err', id: errId, 'aria-live': 'polite' });
+      var describedBy = errId;
+
+      if (p.type === 'enum') {
+        wrap = el('fieldset', { class: 'fld span2' });
+        var legendId = id + '-legend';
+        wrap.appendChild(el('legend', { class: 'legend', id: legendId }, [p.label, optional]));
+        var seg = el('div', { class: 'seg', role: 'radiogroup', 'aria-labelledby': legendId, 'aria-describedby': errId });
+        var opts = (p.required ? [] : [{ v: '', t: 'Geen' }]).concat((p.values || []).map(function (v) { return { v: v, t: v }; }));
+        opts.forEach(function (o, i) {
+          var r = el('input', { type: 'radio', name: p.name, value: o.v });
+          if (!p.required && i === 0) r.checked = true;
+          r.addEventListener('change', function () { clearFieldError(formSlots[p.name]); });
+          controls.push(r);
+          seg.appendChild(el('label', null, [r, el('span', { text: o.t })]));
+        });
+        wrap.appendChild(seg);
+        controls.push(seg);
+        wrap.appendChild(errEl);
+        formSlots[p.name] = { p: p, wrap: wrap, err: errEl, controls: controls, read: function () {
+          var c = form.querySelector('input[name="' + p.name + '"]:checked');
+          return c && c.value !== '' ? c.value : null;
+        }, reset: function () {
+          controls.forEach(function (c, i) { if (c.type === 'radio') c.checked = !p.required && i === 0; });
+        } };
+        form.appendChild(wrap);
+        return;
+      }
+
+      if (p.type === 'boolean') {
+        wrap = el('div', { class: 'fld span2' });
+        var cb = el('input', { type: 'checkbox', id: id, name: p.name });
+        var hintText = p.description || '';
+        if (A_DEL && A_DEL.availableWhen && p.attr && A_DEL.availableWhen.indexOf(p.attr) >= 0 && A_DEL.otherwise) {
+          hintText += (hintText ? '. ' : '') + 'Let op: zo’n run kun je achteraf niet meer verwijderen (' + A_DEL.otherwise + ').';
+        }
+        hint = hintText ? el('p', { class: 'hint', id: hintId, text: hintText }) : null;
+        cb.setAttribute('aria-describedby', (hint ? hintId + ' ' : '') + errId);
+        cb.addEventListener('change', function () { clearFieldError(formSlots[p.name]); });
+        wrap.appendChild(el('label', { class: 'check', for: id }, [cb, el('span', null, [p.label, optional])]));
+        if (hint) wrap.appendChild(hint);
+        wrap.appendChild(errEl);
+        formSlots[p.name] = { p: p, wrap: wrap, err: errEl, controls: [cb],
+          read: function () { return cb.checked ? true : null; },
+          reset: function () { cb.checked = false; } };
+        form.appendChild(wrap);
+        return;
+      }
+
+      wrap = el('div', { class: 'fld' + (p.type === 'string' ? ' span2' : '') });
+      var lab = el('label', { for: id }, [p.label, optional]);
+      wrap.appendChild(lab);
+      var input;
+      if (p.type === 'date') {
+        input = el('input', { type: 'date', id: id, name: p.name, required: !!p.required });
+        input.value = todayISO();
+        // The contract has a rule that a run cannot lie in the future; the date picker reflects that.
+        var noFuture = (C.rules || []).some(function (r) { return /toekomst|future/i.test((r.id || '') + ' ' + (r.description || '')); });
+        if (noFuture) input.max = todayISO();
+        wrap.appendChild(input);
+      } else if (p.type === 'number') {
+        input = el('input', { type: 'text', inputmode: 'decimal', autocomplete: 'off', id: id, name: p.name,
+          required: !!p.required, placeholder: isNum(p.example) ? num(p.example) : null });
+        wrap.appendChild(p.unit ? el('div', { class: 'unit-wrap' }, [input, el('span', { class: 'unit', 'aria-hidden': 'true', text: p.unit })]) : input);
+        var range = [];
+        if (isNum(p.min) && isNum(p.max)) range.push('Tussen ' + num(p.min) + ' en ' + withUnit(p.max, p.unit));
+        else if (isNum(p.min)) range.push('Minstens ' + withUnit(p.min, p.unit));
+        else if (isNum(p.max)) range.push('Hoogstens ' + withUnit(p.max, p.unit));
+        if (range.length) hint = el('p', { class: 'hint', id: hintId, text: range.join(' ') });
+      } else {
+        input = el('input', { type: 'text', id: id, name: p.name, autocomplete: 'off', maxlength: isNum(p.maxLength) ? p.maxLength : null,
+          placeholder: p.description || null });
+        wrap.appendChild(input);
+        if (isNum(p.maxLength)) {
+          hint = el('p', { class: 'hint', id: hintId }, [el('span', { class: 'count', text: '0' }), ' / ' + p.maxLength + ' tekens']);
+          input.addEventListener('input', function () {
+            var c = hint.querySelector('.count'); c.textContent = String(input.value.length);
+            c.classList.toggle('over', input.value.length > p.maxLength);
+          });
+        }
+      }
+      if (hint) { wrap.appendChild(hint); describedBy = hintId + ' ' + errId; }
+      input.setAttribute('aria-describedby', describedBy);
+      input.addEventListener('input', function () { clearFieldError(formSlots[p.name]); updatePreview(); });
+      wrap.appendChild(errEl);
+      formSlots[p.name] = { p: p, wrap: wrap, err: errEl, controls: [input], input: input,
+        read: function () {
+          if (p.type === 'number') return parseNum(input.value);
+          var v = input.value.trim(); return v === '' ? null : v;
+        },
+        reset: function () {
+          input.value = p.type === 'date' ? todayISO() : '';
+          if (p.type === 'date' && input.max) input.max = todayISO();
+          var c = hint && hint.querySelector && hint.querySelector('.count'); if (c) { c.textContent = '0'; c.classList.remove('over'); }
+        } };
+      form.appendChild(wrap);
+    });
+
+    formMsg = el('p', { class: 'form-msg', role: 'status' });
+    submitBtn = el('button', { type: 'submit', class: 'btn btn-primary', text: A_LOG.label || 'Opslaan' });
+    previewEl = el('span', { class: 'preview', 'aria-live': 'polite' });
+    form.appendChild(formMsg);
+    form.appendChild(el('div', { class: 'form-foot' }, [submitBtn, previewEl]));
+    form.addEventListener('submit', onSubmit);
+  }
+
+  function updatePreview() {
+    if (!previewEl || !formSlots[FKM] || !formSlots[FMIN]) return;
+    var t = paceText(formSlots[FMIN].read(), formSlots[FKM].read());
+    previewEl.textContent = t ? 'Tempo: ' + t : '';
+  }
+
+  function clearFormErrors() {
+    Object.keys(formSlots).forEach(function (k) { clearFieldError(formSlots[k]); });
+    formMsg.textContent = ''; formMsg.className = 'form-msg';
+  }
+
+  function validateLocally() {
+    var bad = [];
+    Object.keys(formSlots).forEach(function (k) {
+      var s = formSlots[k], p = s.p, v = s.read();
+      if (v === null) { if (p.required) bad.push([k, p.label + ' is verplicht.', null]); return; }
+      if (p.type === 'number') {
+        if (!isNum(v)) bad.push([k, 'Vul een getal in, bijvoorbeeld ' + (isNum(p.example) ? num(p.example) : '8,4') + '.', null]);
+        else if (isNum(p.min) && v < p.min) bad.push([k, 'Minstens ' + withUnit(p.min, p.unit) + '.', null]);
+        else if (isNum(p.max) && v > p.max) bad.push([k, 'Hoogstens ' + withUnit(p.max, p.unit) + '.', null]);
+      } else if (p.type === 'date') {
+        if (!parseDate(v)) bad.push([k, 'Kies een geldige datum.', null]);
+      } else if (p.type === 'string' && isNum(p.maxLength) && v.length > p.maxLength) {
+        bad.push([k, 'Hoogstens ' + p.maxLength + ' tekens (nu ' + v.length + ').', null]);
+      }
+    });
+    return bad;
+  }
+
+  var submitting = false;
+  function onSubmit(e) {
+    e.preventDefault();
+    if (submitting) return;
+    clearFormErrors();
+    var bad = validateLocally();
+    if (bad.length) {
+      bad.forEach(function (b) { addFieldError(formSlots[b[0]], b[1], b[2]); });
+      formMsg.className = 'form-msg bad';
+      formMsg.textContent = 'Nog niet gelogd: controleer de gemarkeerde velden.';
+      focusFirstInvalid();
+      return;
+    }
+    var params = {};
+    Object.keys(formSlots).forEach(function (k) { var v = formSlots[k].read(); if (v !== null) params[k] = v; });
+    submitting = true;
+    submitBtn.setAttribute('aria-busy', 'true'); submitBtn.disabled = true;
+    Promise.resolve().then(function () { return S.act(A_LOG.name, { params: params }); })
+      .then(function (res) {
+        if (res && res.ok) {
+          Object.keys(formSlots).forEach(function (k) { formSlots[k].reset(); });
+          updatePreview();
+          formMsg.className = 'form-msg good';
+          var d = params[FD], km = params[FKM];
+          formMsg.textContent = 'Run gelogd' + (isNum(km) ? ': ' + withUnit(km, unitOf(FKM)) : '') + (d ? ' op ' + fmtDate(d, { day: 'numeric', month: 'long' }) : '') + '.';
+          announce(formMsg.textContent);
+        } else {
+          showFormRefusal((res && res.error) || {});
+        }
+      }, function (err) { showFormRefusal(networkError(err)); })
+      .then(function () { submitting = false; submitBtn.removeAttribute('aria-busy'); submitBtn.disabled = false; });
+  }
+  function showFormRefusal(error) {
+    var r = placeError(error, formSlots);
+    formMsg.className = 'form-msg bad';
+    formMsg.textContent = '';
+    formMsg.appendChild(el('strong', { style: 'display:block', text: 'Niet gelogd.' }));
+    if (r.left.length || !r.placed) formMsg.appendChild(errorBlock(error, r.left));
+    else formMsg.appendChild(el('span', { text: 'Bekijk de meldingen bij de gemarkeerde velden.' }));
+    announce('Niet gelogd. ' + (error.message || ''));
+    focusFirstInvalid();
+  }
+  function focusFirstInvalid() {
+    var c = form.querySelector('[aria-invalid="true"]');
+    if (c && c.classList.contains('seg')) c = c.querySelector('input');
+    if (c && c.focus) c.focus();
+  }
+
+  /* ---------- Summary ---------- */
+  function renderTiles(summary) {
+    var box = $('tiles'); box.removeAttribute('aria-busy');
+    box.textContent = '';
+    if (!MEASURES.length) { box.hidden = true; return; }
+    var vals = (summary && summary.values) || {};
+    MEASURES.forEach(function (m) {
+      var v = vals[m.name];
+      var valEl = el('div', { class: 'v' });
+      if (isNum(v)) {
+        valEl.appendChild(document.createTextNode(num(v, m.fn === 'count' ? 0 : 1)));
+        if (m.unit) valEl.appendChild(el('small', { text: m.unit }));
+      } else valEl.textContent = '—';
+      box.appendChild(el('div', { class: 'tile' }, [el('div', { class: 'k', text: m.label || m.name }), valEl]));
+    });
+  }
+
+  var activeMonth = null;
+  function renderMonths(summary) {
+    var box = $('months'); box.textContent = '';
+    if (!SUM || !SUM.by) { $('month-card').hidden = true; return; }
+    var groups = (summary && Array.isArray(summary.groups)) ? summary.groups.slice() : [];
+    if (!groups.length) { box.appendChild(el('p', { class: 'empty', text: 'Nog geen maanden om te tonen.' })); $('month-hint').textContent = ''; return; }
+    var allMonths = groups.every(function (g) { return MONTH_RE.test(String(g.key)); });
+    if (allMonths) groups.sort(function (a, b) { return String(b.key).localeCompare(String(a.key)); });
+    if (activeMonth && !groups.some(function (g) { return String(g.key) === activeMonth; })) setFilter(null);
+    $('month-hint').textContent = allMonths ? 'Kies een maand om de runs te filteren' : '';
+    var pm = M_PRIMARY;
+    var max = 0;
+    groups.forEach(function (g) { var v = pm && g.values ? g.values[pm.name] : null; if (isNum(v) && v > max) max = v; });
+    var list = el('ul', { class: 'months' });
+    groups.forEach(function (g) {
+      var vals = g.values || {};
+      var pv = pm ? vals[pm.name] : null;
+      var pct = isNum(pv) && max > 0 ? Math.max(0, Math.min(100, pv / max * 100)) : 0;
+      var meta = MEASURES.filter(function (m) { return m !== pm; }).map(function (m) {
+        var v = vals[m.name];
+        if (m.fn === 'count') return (isNum(v) ? num(v, 0) : '—') + ' ' + (m.label || m.name).toLowerCase();
+        return (m.label || m.name) + ' ' + withUnit(v, m.unit, 1);
+      }).join(' · ');
+      var key = String(g.key);
+      var inner = [
+        el('span', { class: 'm-name', text: monthLabel(g.key) }),
+        el('span', { class: 'm-bar' }, [
+          el('span', { class: 'track', 'aria-hidden': 'true' }, [el('span', { class: 'fill', style: 'width:' + pct.toFixed(1) + '%' + (pct === 0 ? ';min-width:0' : '') })]),
+          el('span', { class: 'm-val', text: pm ? withUnit(pv, pm.unit, 1) : '' })
+        ]),
+        meta ? el('span', { class: 'm-meta', text: meta }) : null
+      ];
+      var item;
+      if (allMonths) {
+        item = el('button', { type: 'button', class: 'month', 'aria-pressed': activeMonth === key ? 'true' : 'false',
+          onclick: function () { setFilter(activeMonth === key ? null : key); } }, inner);
+      } else item = el('div', { class: 'month' }, inner);
+      list.appendChild(el('li', null, [item]));
+    });
+    box.appendChild(list);
+  }
+
+  /* ---------- Runs list ---------- */
+  var runsEl = $('runs');
+  var rowViews = {};      // id -> view
+  var lastResult = null;
+
+  function makeEditor(view, p) {
+    var id = nid('e-' + p.name), errId = id + '-err';
+    var status = el('span', { class: 'status', 'aria-live': 'polite' });
+    var lab = el('div', { class: 'lab-row' }, [el('label', { for: id, text: p.label }), status]);
+    var control;
+    if (p.type === 'enum') {
+      control = el('select', { id: id });
+      control.appendChild(el('option', { value: '', text: '—' }));
+      (p.values || []).forEach(function (v) { control.appendChild(el('option', { value: v, text: cap(v) })); });
+    } else if (p.type === 'boolean') {
+      control = el('select', { id: id }, [el('option', { value: '', text: '—' }), el('option', { value: 'true', text: 'Ja' }), el('option', { value: 'false', text: 'Nee' })]);
+    } else if (p.type === 'date') {
+      control = el('input', { type: 'date', id: id });
+    } else {
+      control = el('input', { type: 'text', id: id, autocomplete: 'off',
+        inputmode: p.type === 'number' ? 'decimal' : null,
+        maxlength: isNum(p.maxLength) ? p.maxLength : null,
+        placeholder: p.type === 'string' ? 'Voeg een ' + String(p.label).toLowerCase() + ' toe' : null });
+    }
+    control.setAttribute('aria-describedby', errId);
+    var errEl = el('p', { class: 'err', id: errId });
+    var wrap = el('div', { class: 'fld' }, [lab, control, errEl]);
+    var ed = { p: p, wrap: wrap, control: control, err: errEl, controls: [control], server: null, dirty: false, pending: false, sentValue: undefined };
+    var isText = control.tagName === 'INPUT' && control.type === 'text';
+    var statusTimer = null;
+    function setStatus(t, cls) { clearTimeout(statusTimer); status.textContent = t; status.className = 'status' + (cls ? ' ' + cls : ''); }
+
+    function read() {
+      var raw = control.value;
+      if (p.type === 'boolean') return raw === '' ? null : raw === 'true';
+      if (p.type === 'number') return parseNum(raw);
+      var v = String(raw).trim(); return v === '' ? null : v;
+    }
+    function write(v) {
+      if (p.type === 'number') control.value = numForInput(v);
+      else if (p.type === 'boolean') control.value = v === true ? 'true' : v === false ? 'false' : '';
+      else control.value = v == null ? '' : String(v);
+    }
+    ed.write = write;
+    function send() {
+      var v = read();
+      if (p.type === 'number' && v !== null && !isNum(v)) { clearFieldError(ed); addFieldError(ed, 'Vul een getal in.'); return; }
+      if (p.type === 'string' && v !== null && isNum(p.maxLength) && v.length > p.maxLength) { clearFieldError(ed); addFieldError(ed, 'Hoogstens ' + p.maxLength + ' tekens.'); return; }
+      if (v === ed.server && !ed.pending) { ed.dirty = false; clearFieldError(ed); setStatus(''); return; }
+      if (ed.pending && v === ed.sentValue) return;
+      var params = {}; params[p.name] = v;
+      ed.pending = true; ed.sentValue = v; setStatus('Bewaren…');
+      clearFieldError(ed);
+      Promise.resolve().then(function () { return S.act(A_EDIT.name, { id: view.id, params: params }); })
+        .then(function (res) {
+          ed.pending = false;
+          if (read() !== v) return; // user kept typing; a newer change will follow
+          if (res && res.ok) {
+            ed.dirty = false; ed.server = v; setStatus('Bewaard', 'saved');
+            statusTimer = setTimeout(function () { setStatus(''); }, 2200);
+          } else refuse((res && res.error) || {});
+        }, function (err) { ed.pending = false; refuse(networkError(err)); });
+    }
+    function refuse(error) {
+      setStatus('Niet bewaard', 'bad');
+      var slots = {}; slots[p.name] = ed;
+      var r = placeError(error, slots);
+      if (r.left.length || !r.placed) {
+        // The refusal concerns this edit, so it belongs next to this field.
+        var box = el('span', { style: 'display:block' }); box.appendChild(errorBlock(error, r.left));
+        errEl.appendChild(box);
+        control.setAttribute('aria-invalid', 'true');
+      }
+      announce(p.label + ' niet bewaard. ' + (error.message || ''));
+    }
+    control.addEventListener('input', function () { ed.dirty = true; if (isText) { clearFieldError(ed); setStatus(''); } });
+    control.addEventListener('change', send);
+    control.addEventListener('keydown', function (e) {
+      if (!isText) return;
+      if (e.key === 'Enter') { e.preventDefault(); send(); }
+      else if (e.key === 'Escape') { write(ed.server); ed.dirty = false; clearFieldError(ed); setStatus(''); }
+    });
+    control.addEventListener('blur', function () { if (isText && ed.dirty && !ed.pending) send(); });
+
+    ed.update = function (value, enabled) {
+      ed.server = value == null ? null : value;
+      var focusedText = isText && document.activeElement === control;
+      if (!ed.dirty && !ed.pending && !focusedText) write(ed.server);
+      control.disabled = !enabled;
+    };
+    return ed;
+  }
+
+  function createRowView(row) {
+    var view = { id: row.id, confirmOpen: false, busy: false };
+    var li = el('li', { class: 'run' });
+    view.li = li;
+
+    // Date + race
+    view.dow = el('span', { class: 'dow' });
+    view.time = el('time');
+    view.badge = el('span', { class: 'badge', text: FRACE ? F[FRACE].label : 'Wedstrijd', hidden: true });
+    li.appendChild(el('div', { class: 'r-date' }, [view.time, view.dow, el('div', null, [view.badge])]));
+
+    // Stats
+    view.statKm = el('dd', { class: 'big' });
+    view.statMin = el('dd');
+    view.statPace = el('dd');
+    var stats = el('dl', { class: 'stats' }, [
+      el('div', null, [el('dt', { text: FKM ? F[FKM].label : 'Afstand' }), view.statKm]),
+      el('div', null, [el('dt', { text: FMIN ? F[FMIN].label : 'Duur' }), view.statMin]),
+      el('div', null, [el('dt', { text: 'Tempo' }), view.statPace])
+    ]);
+    li.appendChild(stats);
+
+    // In-place edits
+    view.editors = {};
+    view.editOff = el('p', { class: 'edit-off', hidden: true });
+    if (A_EDIT && EDIT_PARAMS.length) {
+      var edits = el('div', { class: 'edits' });
+      EDIT_PARAMS.forEach(function (p) {
+        var ed = makeEditor(view, p);
+        view.editors[p.name] = ed;
+        edits.appendChild(ed.wrap);
+      });
+      edits.appendChild(view.editOff);
+      li.appendChild(edits);
+    } else {
+      li.appendChild(el('div'));
+    }
+
+    // Delete
+    var act = el('div', { class: 'r-act' });
+    view.reason = el('p', { class: 'reason', id: nid('reason'), hidden: true });
+    if (A_DEL) {
+      view.delBtn = el('button', { type: 'button', class: 'btn btn-danger-quiet', text: A_DEL.label || 'Verwijderen',
+        'aria-describedby': view.reason.id, onclick: function () { openConfirm(view); } });
+      act.appendChild(view.delBtn);
+      act.appendChild(view.reason);
+    }
+    li.appendChild(act);
+
+    view.confirm = el('div', { class: 'confirm', hidden: true, role: 'group', 'aria-label': 'Bevestig verwijderen' });
+    view.confirmText = el('p');
+    view.cancelBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Annuleren', onclick: function () { closeConfirm(view, true); } });
+    view.okBtn = el('button', { type: 'button', class: 'btn btn-danger btn-sm', text: (A_DEL && A_DEL.label) || 'Verwijderen', onclick: function () { doDelete(view); } });
+    view.confirm.appendChild(view.confirmText);
+    view.confirm.appendChild(el('div', { class: 'btns' }, [view.cancelBtn, view.okBtn]));
+    view.confirm.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeConfirm(view, true); });
+    li.appendChild(view.confirm);
+
+    view.rowErr = el('p', { class: 'err r-err', role: 'alert' });
+    li.appendChild(view.rowErr);
+    return view;
+  }
+
+  function describeRun(v) {
+    var parts = [fmtDate(v[FD], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })];
+    if (isNum(v[FKM])) parts.push(withUnit(v[FKM], unitOf(FKM)));
+    return parts.join(', ');
+  }
+
+  function updateRowView(view, row) {
+    view.row = row;
+    var v = row.values || {};
+    var d = v[FD];
+    view.time.textContent = fmtDate(d, { day: 'numeric', month: 'short', year: 'numeric' });
+    if (parseDate(d)) view.time.setAttribute('datetime', d); else view.time.removeAttribute('datetime');
+    view.dow.textContent = parseDate(d) ? fmtDate(d, { weekday: 'long' }) : '';
+    view.badge.hidden = !(FRACE && v[FRACE] === true);
+    view.statKm.textContent = withUnit(v[FKM], unitOf(FKM));
+    view.statMin.textContent = durationText(v[FMIN], unitOf(FMIN));
+    view.statPace.textContent = paceText(v[FMIN], v[FKM]) || '—';
+
+    var actions = row.actions || {};
+    var ea = A_EDIT ? actions[A_EDIT.name] : null;
+    var editEnabled = !!(ea ? ea.enabled : A_EDIT);
+    Object.keys(view.editors).forEach(function (k) { view.editors[k].update(v[k], editEnabled); });
+    if (!editEnabled && ea && ea.reason) { view.editOff.hidden = false; view.editOff.textContent = 'Aanpassen niet mogelijk: ' + ea.reason; }
+    else view.editOff.hidden = true;
+
+    if (view.delBtn) {
+      var da = actions[A_DEL.name];
+      var canDel = !!(da && da.enabled);
+      view.delBtn.disabled = !canDel || view.busy;
+      if (!canDel) {
+        var why = (da && da.reason) || A_DEL.otherwise || 'nu niet mogelijk';
+        view.reason.hidden = false; view.reason.textContent = 'Niet verwijderbaar: ' + why;
+        if (view.confirmOpen) closeConfirm(view, false);
+      } else { view.reason.hidden = true; view.reason.textContent = ''; }
+    }
+    if (view.confirmOpen) view.confirmText.textContent = 'Run van ' + describeRun(v) + ' definitief verwijderen? Dit kan niet ongedaan worden gemaakt.';
+  }
+
+  function openConfirm(view) {
+    view.confirmOpen = true;
+    view.rowErr.textContent = '';
+    view.confirmText.textContent = 'Run van ' + describeRun((view.row && view.row.values) || {}) + ' definitief verwijderen? Dit kan niet ongedaan worden gemaakt.';
+    view.confirm.hidden = false;
+    view.delBtn.hidden = true;
+    view.cancelBtn.focus();
+  }
+  function closeConfirm(view, refocus) {
+    view.confirmOpen = false;
+    view.confirm.hidden = true;
+    if (view.delBtn) { view.delBtn.hidden = false; if (refocus && !view.delBtn.disabled) view.delBtn.focus(); }
+  }
+  function doDelete(view) {
+    if (view.busy) return;
+    view.busy = true;
+    view.okBtn.disabled = true; view.okBtn.setAttribute('aria-busy', 'true'); view.cancelBtn.disabled = true;
+    var label = describeRun((view.row && view.row.values) || {});
+    Promise.resolve().then(function () { return S.act(A_DEL.name, { id: view.id }); })
+      .then(function (res) {
+        if (res && res.ok) {
+          view.li.classList.add('removing');
+          announce('Run van ' + label + ' verwijderd.');
+          // The row disappears when the next data update arrives.
+        } else fail((res && res.error) || {});
+      }, function (err) { fail(networkError(err)); })
+      .then(function () {
+        view.busy = false;
+        view.okBtn.disabled = false; view.okBtn.removeAttribute('aria-busy'); view.cancelBtn.disabled = false;
+      });
+    function fail(error) {
+      closeConfirm(view, false);
+      view.rowErr.textContent = '';
+      view.rowErr.appendChild(el('strong', { text: 'Niet verwijderd. ' }));
+      view.rowErr.appendChild(errorBlock(error, error.violations));
+      if (view.delBtn && !view.delBtn.disabled) view.delBtn.focus();
+    }
+  }
+
+  function renderRows(result) {
+    var rows = Array.isArray(result.rows) ? result.rows : [];
+    var seen = {};
+    rows.forEach(function (row, i) {
+      if (!row || row.id == null) return;
+      var key = String(row.id);
+      seen[key] = true;
+      var view = rowViews[key];
+      if (!view) { view = createRowView(row); rowViews[key] = view; }
+      updateRowView(view, row);
+      var at = runsEl.children[i];
+      if (at !== view.li) runsEl.insertBefore(view.li, at || null);
+    });
+    Object.keys(rowViews).forEach(function (k) {
+      if (!seen[k]) { var v = rowViews[k]; if (v.li.parentNode) v.li.parentNode.removeChild(v.li); delete rowViews[k]; }
+    });
+    applyFilter();
+  }
+
+  function setFilter(key) {
+    activeMonth = key;
+    if (lastResult) renderMonths(lastResult.summary);
+    applyFilter();
+  }
+  function applyFilter() {
+    var shown = 0, totalShown = 0;
+    Object.keys(rowViews).forEach(function (k) {
+      var v = rowViews[k], d = v.row && v.row.values ? v.row.values[FD] : null;
+      var vis = !activeMonth || (typeof d === 'string' && d.slice(0, 7) === activeMonth);
+      v.li.hidden = !vis; totalShown++; if (vis) shown++;
+    });
+    var chip = $('filter-chip'); chip.textContent = '';
+    if (activeMonth) {
+      chip.appendChild(el('span', { class: 'chip' }, [el('span', { text: monthLabel(activeMonth) }),
+        el('button', { type: 'button', text: 'Toon alle runs', onclick: function () { setFilter(null); } })]));
+    }
+    var total = lastResult && isNum(lastResult.total) ? lastResult.total : totalShown;
+    var meta = $('runs-meta');
+    if (activeMonth) meta.textContent = shown + (shown === 1 ? ' run' : ' runs') + ' in deze maand';
+    else if (totalShown < total) meta.textContent = totalShown + ' van ' + total + ' runs getoond';
+    else meta.textContent = total + (total === 1 ? ' run' : ' runs');
+    var empty = $('runs-empty');
+    if (!totalShown) {
+      empty.hidden = false;
+      empty.textContent = A_LOG ? 'Nog geen runs in je logboek. Log je eerste run met “' + (A_LOG.label || 'Run loggen') + '”.' : 'Nog geen runs in je logboek.';
+    } else if (!shown) {
+      empty.hidden = false; empty.textContent = 'Geen runs in deze maand.';
+    } else empty.hidden = true;
+  }
+
+  /* ---------- Wire up ---------- */
+  buildForm();
+  if (S && typeof S.subscribe === 'function') {
+    S.subscribe(function (result) {
+      result = result || {};
+      lastResult = result;
+      try {
+        renderTiles(result.summary);
+        renderMonths(result.summary);
+        renderRows(result);
+      } catch (e) {
+        var fe = $('fatal'); fe.hidden = false; fe.textContent = 'Er ging iets mis bij het tonen van de gegevens. ' + (e && e.message ? e.message : '');
+      }
+    });
+  } else {
+    renderTiles(null); renderMonths(null); renderRows({ rows: [], total: 0 });
+  }
+})();
+</script>
+</body>
+</html>
