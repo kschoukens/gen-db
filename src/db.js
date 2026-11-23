@@ -12,6 +12,8 @@ import { Schema, PREFIX, checkDefinitions, classifyChanges, changesFromDiff, sho
 import { validateEntities, checkValue } from './validate.js';
 import { runQuery } from './query.js';
 import { Surface, grantsActor } from './surface.js';
+import { randomBytes } from 'node:crypto';
+import { mint, verify, idsOf, expiryOf } from './capability.js';
 
 const META = ['actor', 'intent', 'model', 'confidence', 'via', 'action', 'kind', 'changes', 'origin', 'mergedFrom', 'approvedBy', 'undoes'];
 const pickMeta = (m) => Object.fromEntries(META.filter((k) => m[k] !== undefined && m[k] !== null).map((k) => [k, m[k]]));
@@ -37,13 +39,19 @@ function overlay(state, facts) {
 }
 
 export class Database {
-  /** Pass a `journal` (see journal.js) to keep the fact log across restarts. */
-  constructor({ owners, protect = ['main'], now, journal } = {}) {
+  #secret;
+
+  /**
+   * `journal` (see journal.js) keeps the fact log across restarts. `secret` signs capability tokens
+   * (see capability.js); without one, tokens do not survive a restart.
+   */
+  constructor({ owners, protect = ['main'], now, journal, secret } = {}) {
     if (!owners?.length) throw new GenDBError('OWNER_REQUIRED', 'A database needs at least one owner who answers for its data.', { repair: 'Pass { owners: ["user:…"] }.' });
     this.store = new Store({ now, journal });
     this.owners = new Set(owners);
     this.protected = new Set(protect);
     this._schemas = new Map();
+    this._initCapabilities(secret);
   }
 
   // -- reading -----------------------------------------------------------------------------------
@@ -317,6 +325,66 @@ export class Database {
       ? this._write(branch, [...pending.values()], { ...meta, intent: meta.intent ?? `undo ${keys.map((k) => `${k}=${selector[k]}`).join(', ')}`, kind: 'undo', undoes: targets.map((t) => t.id) })
       : null;
     return { ok: true, undone: targets.map((t) => t.id), restored: tx?.facts.length ?? 0, skipped, tx: tx?.id ?? null };
+  }
+
+  // -- capabilities ------------------------------------------------------------------------------
+  // A surface as a bearer token (see capability.js). grant() is the trusted step: the server has
+  // established who the actor is. After that the token alone is the permission.
+
+  _initCapabilities(secret) {
+    this.#secret = secret === undefined ? randomBytes(32) : Buffer.from(secret);
+    if (this.#secret.length < 32) {
+      throw new GenDBError('SECRET_INVALID', 'The token secret must be at least 32 bytes.', { repair: 'Pass { secret: crypto.randomBytes(32) }, or leave it out for a fresh secret per instance.' });
+    }
+    // Proof of concept: revocations live in memory, as actor -> ids ('*' for every actor). A real
+    // engine persists them, and could drop entries once every token they cover has expired.
+    this._revoked = new Map();
+  }
+
+  /** A token for a surface the actor has been granted. Trusted and server-side, like minting a session. */
+  grant(surfaceName, { actor, branch = 'main' } = {}) {
+    this._requireActor({ actor });
+    new Surface(this, surfaceName, { actor, branch }); // NOT_GRANTED unless the surface grants this actor
+    return mint(this.#secret, { id: randomBytes(16).toString('base64url'), surface: surfaceName, actor, branch });
+  }
+
+  /** The surface a token opens, narrowed by its caveats. Checked again on every use, not only here. */
+  redeem(token) {
+    const payload = verify(this.#secret, token);
+    return new Surface(this, payload.surface, {
+      actor: payload.actor, branch: payload.branch, caveats: payload.caveats, guard: () => this._honour(payload),
+    });
+  }
+
+  /**
+   * Revokes a token id: a root id kills every token derived from that root, a sub-id (an `id`
+   * caveat) only the tokens narrowed through it. Ids are scoped to the actor a token was issued to,
+   * because sub-ids are chosen by holders and need not be unique. Actors revoke their own tokens;
+   * owners revoke anyone's, by default for every actor.
+   */
+  revoke(id, { actor, issuedTo } = {}) {
+    this._requireActor({ actor });
+    const owner = this.owners.has(actor);
+    const scope = issuedTo ?? (owner ? '*' : actor);
+    if (typeof id !== 'string' || !id) throw new GenDBError('BAD_SELECTOR', 'Say which token id to revoke.', { repair: 'Pass the id of a token or of an id caveat; inspect() shows them.' });
+    if (scope !== actor && !owner) {
+      throw new GenDBError('NOT_GRANTED', `${actor} may only revoke tokens issued to ${actor}.`, { repair: 'Revoke your own tokens, or ask an owner.' });
+    }
+    if (!this._revoked.has(scope)) this._revoked.set(scope, new Set());
+    this._revoked.get(scope).add(id);
+    return { ok: true, revoked: id, issuedTo: scope };
+  }
+
+  _honour(payload) {
+    const gone = (scope, id) => this._revoked.get(scope)?.has(id);
+    if (idsOf(payload).some((id) => gone('*', id) || gone(payload.actor, id))) {
+      throw new GenDBError('TOKEN_REVOKED', 'This token has been revoked.', { repair: 'Ask whoever gave you the token for a new one.' });
+    }
+    const expires = expiryOf(payload);
+    // Written so that an unreadable clock counts as expired rather than as never.
+    if (expires !== Infinity && !(Date.parse(this.store.now()) < expires)) {
+      throw new GenDBError('TOKEN_EXPIRED', 'This token has expired.', { repair: 'Ask whoever gave you the token for a new one.' });
+    }
   }
 
   // -- internals ---------------------------------------------------------------------------------

@@ -99,32 +99,39 @@ document.head.appendChild(Object.assign(document.createElement('style'), { textC
 
 const $ = (selector) => document.querySelector(selector);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const S = { actor: 'user:kim', branch: 'main', surface: null, contract: null, stream: null, deferred: null, state: null };
+const S = { actor: 'user:kim', branch: 'main', surface: null, token: null, world: null, contract: null, stream: null, deferred: null, state: null };
 const LEVEL = { additive: 'additief', tightening: 'strenger', breaking: 'brekend' };
 
-async function api(path, body) {
-  const url = `${path}?actor=${encodeURIComponent(S.actor)}&branch=${encodeURIComponent(S.branch)}`;
+async function request(url, body) {
   const response = await fetch(url, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   return response.json();
 }
+
+// The console (state, agent steps, merge, undo) still says who you are; a demo shortcut.
+const api = (path, body) => request(`${path}?actor=${encodeURIComponent(S.actor)}&branch=${encodeURIComponent(S.branch)}`, body);
+
+// The generated UI holds a token for its surface and nothing else: no actor, no branch.
+const surfaceUrl = (op) => `/api/surfaces/${encodeURIComponent(S.surface)}/${op}?token=${encodeURIComponent(S.token)}`;
 
 // -- the generated UI and its binding ---------------------------------------------------------------
 
 async function openSurface(name) {
   S.stream?.close();
   S.surface = name;
+  S.token = S.state?.surfaces.find((s) => s.name === name)?.token ?? null;
+  S.world = S.branch; // a token is bound to one branch
   S.contract = null;
   if (!name) { $('#ui').innerHTML = '<p class="hint">Geen surfaces voor deze gebruiker in deze wereld.</p>'; $('#contract').textContent = ''; return; }
 
   // Step 1: the generator sees the contract, and only the contract.
-  const contract = await api(`/api/surfaces/${encodeURIComponent(name)}/contract`);
+  const contract = await request(surfaceUrl('contract'));
   if (contract.error) { $('#ui').innerHTML = `<p class="hint">${esc(contract.error.message)}</p>`; return; }
   S.contract = contract;
   $('#ui').innerHTML = generateUI(contract);
   $('#contract').textContent = JSON.stringify(contract, null, 2);
 
   // Step 2: live data is bound in the browser.
-  S.stream = new EventSource(`/api/surfaces/${encodeURIComponent(name)}/stream?actor=${encodeURIComponent(S.actor)}&branch=${encodeURIComponent(S.branch)}`);
+  S.stream = new EventSource(surfaceUrl('stream'));
   S.stream.onmessage = (event) => bind(JSON.parse(event.data));
 }
 
@@ -149,7 +156,7 @@ function showError(error) {
 }
 
 async function act(action, id, params) {
-  const result = await api(`/api/surfaces/${encodeURIComponent(S.surface)}/act`, { action, id, params });
+  const result = await request(surfaceUrl('act'), { action, id, params });
   showError(result.error ?? null);
   return !result.error;
 }
@@ -237,6 +244,7 @@ async function refresh() {
       <small>${[tx.kind === 'schema' ? 'schema' : `${tx.facts} feiten`, tx.via && `via ${tx.via}`, tx.confidence != null && `zekerheid ${Math.round(tx.confidence * 100)}%`, tx.mergedFrom && `uit ${tx.mergedFrom}, goedgekeurd door ${tx.approvedBy}`].filter(Boolean).map(esc).join(' · ')}</small></li>`).join('');
 
   if (!state.surfaces.some((s) => s.name === S.surface)) await openSurface(state.surfaces[0]?.name ?? null);
+  else if (S.world !== S.branch) await openSurface(S.surface); // the branch was merged or discarded under us
 }
 
 async function switchTo(change) {
