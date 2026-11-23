@@ -37,9 +37,10 @@ function overlay(state, facts) {
 }
 
 export class Database {
-  constructor({ owners, protect = ['main'], now } = {}) {
+  /** Pass a `journal` (see journal.js) to keep the fact log across restarts. */
+  constructor({ owners, protect = ['main'], now, journal } = {}) {
     if (!owners?.length) throw new GenDBError('OWNER_REQUIRED', 'A database needs at least one owner who answers for its data.', { repair: 'Pass { owners: ["user:…"] }.' });
-    this.store = new Store({ now });
+    this.store = new Store({ now, journal });
     this.owners = new Set(owners);
     this.protected = new Set(protect);
     this._schemas = new Map();
@@ -267,9 +268,11 @@ export class Database {
       });
     }
 
-    // Replay transaction by transaction, so provenance survives the merge.
-    for (const tx of b.own) this.store.commit(b.parent, tx.facts, pickMeta({ ...tx, origin: tx.id, mergedFrom: branchName, approvedBy }));
-    b.status = 'merged';
+    // Replay transaction by transaction, so provenance survives the merge. All or nothing, also on disk.
+    this.store.atomic(() => {
+      for (const tx of b.own) this.store.commit(b.parent, tx.facts, pickMeta({ ...tx, origin: tx.id, mergedFrom: branchName, approvedBy }));
+      this.store.setStatus(branchName, 'merged');
+    });
     return { ok: true, merged: b.own.length, review };
   }
 
@@ -277,7 +280,7 @@ export class Database {
     this._requireActor({ actor });
     const b = this.store.openBranch(branchName);
     if (!b.parent) throw new GenDBError('NOT_A_FORK', `"${branchName}" cannot be discarded.`, { repair: 'Only forks can be discarded.' });
-    b.status = 'discarded';
+    this.store.setStatus(branchName, 'discarded');
     return { ok: true, discarded: b.own.length };
   }
 
