@@ -71,7 +71,10 @@ h2 { font-size: 1rem; margin: 0; font-weight: 650; }
 
 /* form */
 form { display: grid; gap: 18px; }
-.field { display: grid; gap: 6px; min-width: 0; }
+.field { display: grid; gap: 6px; min-width: 0; align-content: start; }
+.pair { align-items: start; }
+.with-unit { align-self: start; }
+#moreLabels { margin-left: .3em; }
 .field > label, legend {
   font-weight: 600; font-size: .95rem; padding: 0;
 }
@@ -404,7 +407,9 @@ li.run.fresh { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-s
   // quick distance chips (filled from recent runs)
   var distChips = el("div", { class: "chips", role: "group", "aria-label": "Snel kiezen: recente afstanden" });
   if (inputs.distance_km) {
-    inputs.distance_km.parentNode.parentNode.insertBefore(distChips, document.getElementById("help-distance_km"));
+    // full-width row below the Afstand/Duur pair, so it never distorts the pair
+    var pairEl = document.getElementById("pairDM");
+    pairEl.parentNode.insertBefore(distChips, pairEl.nextSibling);
   }
   function renderDistChips(rows) {
     if (!inputs.distance_km) return;
