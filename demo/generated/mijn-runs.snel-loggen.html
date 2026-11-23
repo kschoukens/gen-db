@@ -1,0 +1,965 @@
+<!doctype html>
+<html lang="nl-BE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Mijn runs</title>
+<style>
+:root {
+  --bg: #f4f5f2;
+  --card: #ffffff;
+  --ink: #16191c;
+  --muted: #5d646b;
+  --line: #d9ddd8;
+  --field: #ffffff;
+  --accent: #0d6b4f;
+  --accent-ink: #ffffff;
+  --accent-soft: #dcefe7;
+  --danger: #b3261e;
+  --danger-soft: #fbe4e1;
+  --warn: #8a5a00;
+  --warn-soft: #fdf0d5;
+  --focus: #1a5fd0;
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111416;
+    --card: #1a1f22;
+    --ink: #eef1ee;
+    --muted: #a3aba7;
+    --line: #2e3539;
+    --field: #13171a;
+    --accent: #4fc79b;
+    --accent-ink: #062218;
+    --accent-soft: #173a2e;
+    --danger: #ff8a80;
+    --danger-soft: #3a1b19;
+    --warn: #f3c06b;
+    --warn-soft: #3a2d12;
+    --focus: #8ab4ff;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow-x: hidden;
+}
+main {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 12px 16px calc(32px + env(safe-area-inset-bottom));
+}
+h1 { font-size: 1.15rem; margin: 4px 0 12px; font-weight: 650; }
+h2 { font-size: 1rem; margin: 0; font-weight: 650; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.visually-hidden {
+  position: absolute !important; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0; padding: 0; margin: -1px;
+}
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* form */
+form { display: grid; gap: 18px; }
+.field { display: grid; gap: 6px; min-width: 0; }
+.field > label, legend {
+  font-weight: 600; font-size: .95rem; padding: 0;
+}
+.unit-hint { color: var(--muted); font-weight: 400; }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+fieldset > legend { margin-bottom: 6px; }
+input[type="text"], input[type="date"] {
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 1.2rem;
+  color: var(--ink);
+  background: var(--field);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+}
+input[aria-invalid="true"] { border-color: var(--danger); }
+.with-unit { position: relative; }
+.with-unit input { padding-right: 56px; }
+.with-unit .unit {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  color: var(--muted); pointer-events: none; font-size: 1rem;
+}
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip, .seg button, .btn {
+  font: inherit;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  background: var(--field);
+  color: var(--ink);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.seg button { min-height: 52px; border-radius: 12px; font-size: 1.05rem; }
+.seg button[aria-pressed="true"] {
+  background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 650;
+}
+.seg.small button { min-height: 44px; font-size: .98rem; }
+.toggle {
+  display: flex; align-items: center; gap: 12px; min-height: 52px; cursor: pointer;
+  font-weight: 600;
+}
+.toggle input { width: 26px; height: 26px; accent-color: var(--accent); margin: 0; flex: none; }
+.help { color: var(--muted); font-size: .88rem; margin: 0; }
+.pace { font-size: .95rem; color: var(--muted); margin: 0; min-height: 1.4em; }
+.pace strong { color: var(--ink); }
+.err {
+  color: var(--danger); font-size: .92rem; margin: 0;
+}
+.err:empty { display: none; }
+.err .repair { display: block; color: var(--ink); opacity: .85; }
+.formerr:not(:empty) {
+  background: var(--danger-soft); border-radius: 10px; padding: 10px 12px;
+}
+.warn { color: var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 8px 12px; font-size: .9rem; margin: 0; }
+.warn:empty { display: none; }
+details.more { border-top: 1px solid var(--line); padding-top: 4px; }
+details.more > summary {
+  min-height: 48px; display: flex; align-items: center; cursor: pointer;
+  color: var(--muted); font-weight: 600; list-style: none;
+}
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: "+"; display: inline-block; width: 1.3em; font-size: 1.2rem; }
+details.more[open] > summary::before { content: "−"; }
+details.more .inner { display: grid; gap: 16px; padding-bottom: 4px; }
+.btn-primary {
+  width: 100%;
+  min-height: 58px;
+  border-radius: 14px;
+  border: 0;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 1.15rem;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.btn-primary[disabled] { opacity: .6; cursor: progress; }
+.ok-msg {
+  margin: 0; background: var(--accent-soft); color: var(--ink);
+  border-radius: 10px; padding: 10px 12px; font-weight: 600;
+}
+.ok-msg:empty { display: none; }
+.count { color: var(--muted); font-size: .85rem; text-align: right; margin: 0; }
+
+/* recent */
+section.recent { margin-top: 20px; }
+.recent-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
+.stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; min-width: 0; }
+.stat .v { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.stat .l { font-size: .78rem; color: var(--muted); }
+.month { color: var(--muted); font-size: .88rem; margin: 0 0 10px; }
+.month:empty { display: none; }
+ul.runs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+li.run { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+li.run.fresh { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.run-sum {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center;
+  width: 100%; text-align: left; padding: 12px 14px; min-height: 60px;
+  background: none; border: 0; color: inherit; font: inherit; cursor: pointer;
+}
+.run-main { font-weight: 700; font-size: 1.05rem; font-variant-numeric: tabular-nums; min-width: 0; }
+.run-date { color: var(--muted); font-size: .88rem; text-align: right; white-space: nowrap; }
+.run-meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: .86rem; color: var(--muted); min-width: 0; }
+.pill { border-radius: 999px; padding: 1px 8px; font-size: .8rem; border: 1px solid var(--line); color: var(--ink); }
+.pill.race { background: var(--warn-soft); border-color: transparent; color: var(--warn); font-weight: 600; }
+.note-snip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; max-width: 100%; }
+.run-detail { padding: 4px 14px 14px; display: grid; gap: 14px; border-top: 1px solid var(--line); }
+.run-detail[hidden] { display: none; }
+.row-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn-danger { border-color: var(--danger); color: var(--danger); background: transparent; }
+.btn-danger.solid { background: var(--danger); color: var(--card); }
+.btn[disabled] { opacity: .55; cursor: not-allowed; }
+.status { font-size: .85rem; color: var(--muted); margin: 0; min-height: 1.2em; }
+.empty, .loading { color: var(--muted); padding: 16px; text-align: center; background: var(--card); border: 1px dashed var(--line); border-radius: 12px; }
+.more-btn { margin-top: 10px; width: 100%; border-radius: 12px; }
+.confirm { display: grid; gap: 8px; background: var(--danger-soft); border-radius: 10px; padding: 10px 12px; }
+.confirm[hidden] { display: none; }
+@media (min-width: 720px) {
+  main { padding-top: 28px; }
+}
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">Mijn runs</h1>
+
+  <div class="card">
+    <form id="logForm" novalidate aria-labelledby="formTitle">
+      <h2 id="formTitle" class="visually-hidden">Run loggen</h2>
+
+      <div class="pair" id="pairDM">
+        <div class="field" id="f-distance_km"></div>
+        <div class="field" id="f-minutes"></div>
+      </div>
+      <p class="pace" id="pace" aria-live="polite"></p>
+      <p class="warn" id="paceWarn"></p>
+      <p class="err" id="pairErr" role="alert"></p>
+
+      <fieldset class="field" id="f-feeling"></fieldset>
+
+      <div class="field" id="f-date"></div>
+
+      <details class="more" id="more">
+        <summary>Meer: <span id="moreLabels"></span></summary>
+        <div class="inner">
+          <div class="field" id="f-race"></div>
+          <div class="field" id="f-note"></div>
+        </div>
+      </details>
+
+      <p class="err formerr" id="formErr" role="alert"></p>
+      <p class="ok-msg" id="okMsg" role="status" aria-live="polite"></p>
+      <button type="submit" class="btn-primary" id="submitBtn">Run loggen</button>
+    </form>
+  </div>
+
+  <section class="recent" aria-labelledby="recentTitle">
+    <div class="recent-head">
+      <h2 id="recentTitle">Laatste runs</h2>
+    </div>
+    <div class="stats" id="stats" hidden></div>
+    <p class="month" id="month"></p>
+    <div id="listState" class="loading">Runs laden…</div>
+    <ul class="runs" id="runs"></ul>
+    <button type="button" class="btn more-btn" id="moreBtn" hidden>Meer runs tonen</button>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var S = window.surface;
+  var C = (S && S.contract) || {};
+  var LOCALE = "nl-BE";
+
+  /* ---------- contract lookups ---------- */
+  var actions = Array.isArray(C.actions) ? C.actions : [];
+  var fields = Array.isArray(C.fields) ? C.fields : [];
+  function findAction(name, kind, scope) {
+    return actions.find(function (a) { return a.name === name; }) ||
+      actions.find(function (a) { return a.kind === kind && a.scope === scope; }) || null;
+  }
+  var LOG = findAction("Run.log", "create", "collection");
+  var REMOVE = findAction("Run.remove", "delete", "row");
+  var EDIT = actions.find(function (a) { return a.name === "$edit"; }) || null;
+
+  function fieldDef(name) { return fields.find(function (f) { return f.name === name; }) || null; }
+  function paramDef(action, name) {
+    if (!action || !Array.isArray(action.params)) return null;
+    return action.params.find(function (p) { return p.name === name; }) || null;
+  }
+  function label(name) {
+    var d = fieldDef(name) || paramDef(LOG, name);
+    return (d && d.label) || name;
+  }
+  function unit(name) {
+    var d = fieldDef(name) || paramDef(LOG, name);
+    return (d && d.unit) || "";
+  }
+  // attr ("Run.distance_km") -> field name
+  var attrToName = {};
+  fields.concat(LOG && LOG.params ? LOG.params : []).forEach(function (f) {
+    if (f && f.attr) attrToName[f.attr] = f.name;
+  });
+
+  if (C.label) { document.getElementById("title").textContent = C.label; document.title = C.label; }
+
+  /* ---------- formatting ---------- */
+  var nf1 = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 2 });
+  var nf0 = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 });
+  function fmtNum(n, u) {
+    if (n === null || n === undefined || typeof n !== "number" || !isFinite(n)) return "—";
+    return nf1.format(n) + (u ? " " + u : "");
+  }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function isoLocal(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function todayIso() { return isoLocal(new Date()); }
+  function shiftIso(iso, days) {
+    var p = iso.split("-").map(Number);
+    var d = new Date(p[0], p[1] - 1, p[2]);
+    d.setDate(d.getDate() + days);
+    return isoLocal(d);
+  }
+  function parseIso(iso) {
+    if (typeof iso !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+    var p = iso.split("-").map(Number);
+    return new Date(p[0], p[1] - 1, p[2]);
+  }
+  var dfShort = new Intl.DateTimeFormat(LOCALE, { weekday: "short", day: "numeric", month: "short" });
+  var dfYear = new Intl.DateTimeFormat(LOCALE, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  function fmtDate(iso) {
+    if (iso === null || iso === undefined) return "—";
+    var d = parseIso(iso);
+    if (!d) return String(iso);
+    var t = todayIso();
+    if (iso === t) return "vandaag";
+    if (iso === shiftIso(t, -1)) return "gisteren";
+    return (d.getFullYear() === new Date().getFullYear() ? dfShort : dfYear).format(d);
+  }
+  function pace(km, min) {
+    if (typeof km !== "number" || typeof min !== "number" || !(km > 0) || !(min > 0)) return null;
+    return min / km;
+  }
+  function fmtPace(p) {
+    if (p === null || !isFinite(p)) return "—";
+    var totalSec = Math.round(p * 60);
+    return Math.floor(totalSec / 60) + ":" + pad(totalSec % 60) + " min/km";
+  }
+  function parseNum(s) {
+    if (s === null || s === undefined) return { empty: true };
+    s = String(s).trim().replace(/\s+/g, "");
+    if (s === "") return { empty: true };
+    if (!/^\d*([.,]\d+)?$/.test(s) || s === "." || s === ",") return { bad: true };
+    var n = Number(s.replace(",", "."));
+    return isFinite(n) ? { value: n } : { bad: true };
+  }
+
+  /* ---------- small DOM helper ---------- */
+  function el(tag, attrs, kids) {
+    var e = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) return;
+      if (k === "text") e.textContent = v;
+      else if (k === "class") e.className = v;
+      else if (k.slice(0, 2) === "on") e.addEventListener(k.slice(2), v);
+      else e.setAttribute(k, v === true ? "" : v);
+    });
+    (kids || []).forEach(function (c) { if (c) e.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return e;
+  }
+  function showError(node, message, repair) {
+    node.textContent = "";
+    if (!message && !repair) return;
+    if (message) node.appendChild(document.createTextNode(message));
+    if (repair) node.appendChild(el("span", { class: "repair", text: repair }));
+  }
+
+  /* ---------- build the log form ---------- */
+  var form = document.getElementById("logForm");
+  var submitBtn = document.getElementById("submitBtn");
+  var formErr = document.getElementById("formErr");
+  var okMsg = document.getElementById("okMsg");
+  var pairErr = document.getElementById("pairErr");
+  var paceEl = document.getElementById("pace");
+  var paceWarn = document.getElementById("paceWarn");
+  var inputs = {};   // name -> input element (or state holder)
+  var errs = {};     // name -> error node
+  var feelingValue = null;
+
+  if (LOG) {
+    submitBtn.textContent = LOG.label || "Run loggen";
+    document.getElementById("formTitle").textContent = LOG.label || "Run loggen";
+  }
+
+  function numberField(name, hint) {
+    var p = paramDef(LOG, name);
+    var host = document.getElementById("f-" + name);
+    if (!p) { host.remove(); return; }
+    var id = "in-" + name;
+    var u = p.unit || "";
+    var input = el("input", {
+      type: "text", id: id, name: name, inputmode: "decimal", autocomplete: "off",
+      enterkeyhint: "next", "aria-describedby": "err-" + name + " help-" + name,
+      placeholder: p.example !== undefined ? nf1.format(p.example) : null
+    });
+    var err = el("p", { class: "err", id: "err-" + name });
+    var rangeTxt = (typeof p.min === "number" && typeof p.max === "number")
+      ? nf1.format(p.min) + "–" + nf1.format(p.max) + (u ? " " + u : "") : "";
+    host.appendChild(el("label", { for: id, text: p.label || name }));
+    host.appendChild(el("div", { class: "with-unit" }, [input, el("span", { class: "unit", "aria-hidden": "true", text: u })]));
+    host.appendChild(el("p", { class: "help", id: "help-" + name, text: hint || rangeTxt }));
+    host.appendChild(err);
+    inputs[name] = input; errs[name] = err;
+    input.addEventListener("input", function () { clearFieldErr(name); updatePace(); });
+  }
+  numberField("distance_km");
+  numberField("minutes");
+
+  // quick distance chips (filled from recent runs)
+  var distChips = el("div", { class: "chips", role: "group", "aria-label": "Snel kiezen: recente afstanden" });
+  if (inputs.distance_km) {
+    inputs.distance_km.parentNode.parentNode.insertBefore(distChips, document.getElementById("help-distance_km"));
+  }
+  function renderDistChips(rows) {
+    if (!inputs.distance_km) return;
+    var seen = {}, list = [];
+    rows.forEach(function (r) {
+      var v = r.values && r.values.distance_km;
+      if (typeof v === "number" && isFinite(v) && !seen[v] && list.length < 3) { seen[v] = 1; list.push(v); }
+    });
+    var cur = parseNum(inputs.distance_km.value).value;
+    distChips.textContent = "";
+    list.forEach(function (v) {
+      distChips.appendChild(el("button", {
+        type: "button", class: "chip", "aria-pressed": cur === v ? "true" : "false",
+        text: nf1.format(v) + " " + unit("distance_km"),
+        onclick: function () {
+          inputs.distance_km.value = nf1.format(v);
+          clearFieldErr("distance_km"); updatePace(); syncChips();
+          if (inputs.minutes && !inputs.minutes.value) inputs.minutes.focus();
+        }
+      }));
+    });
+    distChips.hidden = list.length === 0;
+  }
+  function syncChips() {
+    var cur = parseNum(inputs.distance_km ? inputs.distance_km.value : "").value;
+    Array.prototype.forEach.call(distChips.children, function (b) {
+      var v = parseNum(b.textContent.replace(/[^\d,.]/g, "")).value;
+      b.setAttribute("aria-pressed", v === cur ? "true" : "false");
+    });
+  }
+  if (inputs.distance_km) inputs.distance_km.addEventListener("input", syncChips);
+
+  // feeling: segmented, tap again to clear (optional)
+  (function () {
+    var p = paramDef(LOG, "feeling");
+    var host = document.getElementById("f-feeling");
+    if (!p) { host.remove(); return; }
+    var legendId = "lg-feeling";
+    host.appendChild(el("legend", { id: legendId }, [p.label || "Gevoel", el("span", { class: "unit-hint", text: " (optioneel)" })]));
+    var seg = el("div", { class: "seg" });
+    (p.values || []).forEach(function (v) {
+      seg.appendChild(el("button", {
+        type: "button", "aria-pressed": "false", "data-v": v, text: v,
+        onclick: function () {
+          feelingValue = (feelingValue === v) ? null : v;
+          syncFeeling(); clearFieldErr("feeling");
+        }
+      }));
+    });
+    host.appendChild(seg);
+    var err = el("p", { class: "err", id: "err-feeling" });
+    host.appendChild(err);
+    errs.feeling = err;
+    inputs.feeling = seg;
+  })();
+  function syncFeeling() {
+    if (!inputs.feeling) return;
+    Array.prototype.forEach.call(inputs.feeling.children, function (b) {
+      b.setAttribute("aria-pressed", b.getAttribute("data-v") === feelingValue ? "true" : "false");
+    });
+  }
+
+  // date: today by default, quick chips
+  (function () {
+    var p = paramDef(LOG, "date");
+    var host = document.getElementById("f-date");
+    if (!p) { host.remove(); return; }
+    var id = "in-date";
+    var input = el("input", { type: "date", id: id, name: "date", max: todayIso(), "aria-describedby": "err-date", required: p.required ? true : null });
+    input.value = todayIso();
+    var chips = el("div", { class: "chips", role: "group", "aria-label": "Snel kiezen: datum" });
+    var mk = function (txt, offset) {
+      return el("button", { type: "button", class: "chip", "data-off": String(offset), text: txt,
+        onclick: function () { input.value = shiftIso(todayIso(), offset); clearFieldErr("date"); syncDateChips(); } });
+    };
+    chips.appendChild(mk("Vandaag", 0));
+    chips.appendChild(mk("Gisteren", -1));
+    host.appendChild(el("label", { for: id, text: p.label || "Datum" }));
+    host.appendChild(chips);
+    host.appendChild(input);
+    var err = el("p", { class: "err", id: "err-date" });
+    host.appendChild(err);
+    inputs.date = input; errs.date = err;
+    input.addEventListener("input", function () { clearFieldErr("date"); syncDateChips(); });
+    input.addEventListener("change", syncDateChips);
+    inputs.dateChips = chips;
+    syncDateChips();
+  })();
+  function syncDateChips() {
+    if (!inputs.dateChips) return;
+    var t = todayIso();
+    inputs.date.max = t;
+    Array.prototype.forEach.call(inputs.dateChips.children, function (b) {
+      b.setAttribute("aria-pressed", shiftIso(t, Number(b.getAttribute("data-off"))) === inputs.date.value ? "true" : "false");
+    });
+  }
+
+  // race
+  (function () {
+    var p = paramDef(LOG, "race");
+    var host = document.getElementById("f-race");
+    if (!p) { host.remove(); return; }
+    var id = "in-race";
+    var input = el("input", { type: "checkbox", id: id, name: "race", "aria-describedby": "help-race err-race" });
+    host.appendChild(el("label", { class: "toggle", for: id }, [input, p.label || "Wedstrijd"]));
+    var helpTxt = p.description || "";
+    if (REMOVE && REMOVE.otherwise) helpTxt += (helpTxt ? ". " : "") + "Let op: " + REMOVE.otherwise + " (niet te verwijderen).";
+    host.appendChild(el("p", { class: "help", id: "help-race", text: helpTxt }));
+    var err = el("p", { class: "err", id: "err-race" });
+    host.appendChild(err);
+    inputs.race = input; errs.race = err;
+    input.addEventListener("change", function () { clearFieldErr("race"); });
+  })();
+
+  // note
+  (function () {
+    var p = paramDef(LOG, "note");
+    var host = document.getElementById("f-note");
+    if (!p) { host.remove(); return; }
+    var id = "in-note";
+    var max = typeof p.maxLength === "number" ? p.maxLength : null;
+    var input = el("input", { type: "text", id: id, name: "note", maxlength: max, autocomplete: "off", enterkeyhint: "done", "aria-describedby": "cnt-note err-note" });
+    var cnt = el("p", { class: "count", id: "cnt-note" });
+    host.appendChild(el("label", { for: id, text: p.label || "Notitie" }));
+    host.appendChild(input);
+    host.appendChild(cnt);
+    var err = el("p", { class: "err", id: "err-note" });
+    host.appendChild(err);
+    inputs.note = input; errs.note = err;
+    var upd = function () { cnt.textContent = max ? input.value.length + " / " + max : ""; };
+    input.addEventListener("input", function () { upd(); clearFieldErr("note"); });
+    upd();
+    inputs.noteCount = upd;
+  })();
+
+  // "Meer:" summary names the hidden fields
+  (function () {
+    var names = ["race", "note"].filter(function (n) { return document.getElementById("f-" + n); }).map(label);
+    if (!names.length) document.getElementById("more").remove();
+    else document.getElementById("moreLabels").textContent = names.join(", ").toLowerCase();
+  })();
+
+  // pace preview + plausibility rule hint
+  var paceRule = (Array.isArray(C.rules) ? C.rules : []).find(function (r) { return /tempo/i.test(r.id || "") || /tempo/i.test(r.description || ""); });
+  function updatePace() {
+    var km = inputs.distance_km ? parseNum(inputs.distance_km.value).value : undefined;
+    var min = inputs.minutes ? parseNum(inputs.minutes.value).value : undefined;
+    var p = pace(km, min);
+    paceEl.textContent = "";
+    paceWarn.textContent = "";
+    if (p === null) return;
+    paceEl.appendChild(document.createTextNode("Tempo: "));
+    paceEl.appendChild(el("strong", { text: fmtPace(p) }));
+    if (paceRule && (p < 2 || p > 20)) paceWarn.textContent = paceRule.description + ". Kijk afstand en duur na.";
+  }
+
+  /* ---------- errors from the database ---------- */
+  function clearFieldErr(name) {
+    if (errs[name]) errs[name].textContent = "";
+    var inp = inputs[name];
+    if (inp && inp.removeAttribute) inp.removeAttribute("aria-invalid");
+    if (name === "distance_km" || name === "minutes") pairErr.textContent = "";
+  }
+  function clearAllErr() {
+    Object.keys(errs).forEach(clearFieldErr);
+    pairErr.textContent = "";
+    formErr.textContent = "";
+  }
+  function markInvalid(name) {
+    var inp = inputs[name];
+    if (inp && inp.setAttribute && inp.tagName === "INPUT") inp.setAttribute("aria-invalid", "true");
+  }
+  function appendErr(node, message, repair) {
+    if (node.childNodes.length) node.appendChild(el("br"));
+    var wrap = el("span");
+    showError(wrap, message, repair);
+    node.appendChild(wrap);
+  }
+  // Places every problem next to the field(s) it concerns. Returns first field name for focus.
+  function placeErrors(error, errMap, generalNode, opts) {
+    opts = opts || {};
+    var first = null;
+    var vs = Array.isArray(error.violations) ? error.violations : [];
+    vs.forEach(function (v) {
+      var targets = [];
+      if (v.field) targets = [v.field];
+      else if (Array.isArray(v.attributes)) targets = v.attributes.map(function (a) { return attrToName[a]; }).filter(Boolean);
+      targets = targets.filter(function (t, i) { return targets.indexOf(t) === i; });
+      var msg = v.message || error.message || "Ongeldige waarde.";
+      var rep = v.repair || null;
+      // A rule spanning distance + duration goes under that pair
+      if (opts.pairNode && targets.length > 1 && targets.every(function (t) { return t === "distance_km" || t === "minutes"; })) {
+        appendErr(opts.pairNode, msg, rep);
+        targets.forEach(markInvalid);
+        first = first || targets[0];
+        return;
+      }
+      var placed = false;
+      targets.forEach(function (t) {
+        if (errMap[t]) {
+          appendErr(errMap[t], msg, rep);
+          markInvalid(t);
+          placed = true;
+          first = first || t;
+          // the field lives in the collapsed "Meer" section: open it
+          if ((t === "race" || t === "note") && opts.openMore) opts.openMore();
+        }
+      });
+      if (!placed) appendErr(generalNode, (targets.length ? targets.map(label).join(", ") + ": " : "") + msg, rep);
+    });
+    if (!vs.length || (!error.violations && (error.message || error.repair))) {
+      appendErr(generalNode, error.message || "De database weigerde dit verzoek.", error.repair || null);
+    } else if (vs.length && error.repair) {
+      appendErr(generalNode, null, error.repair);
+    }
+    if (Array.isArray(error.didYouMean) && error.didYouMean.length) {
+      appendErr(generalNode, "Bedoelde je: " + error.didYouMean.join(", ") + "?", null);
+    }
+    return first;
+  }
+
+  /* ---------- submit ---------- */
+  var pending = false;
+  if (!LOG || !S || typeof S.act !== "function") {
+    submitBtn.disabled = true;
+    showError(formErr, "Loggen is hier niet mogelijk.", "Deze weergave biedt geen actie om een run vast te leggen.");
+  }
+  form.addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    if (pending || !LOG) return;
+    clearAllErr();
+    okMsg.textContent = "";
+    var params = {};
+    var localBad = null;
+    ["distance_km", "minutes"].forEach(function (n) {
+      if (!inputs[n]) return;
+      var r = parseNum(inputs[n].value);
+      if (r.bad) {
+        showError(errs[n], "Dit is geen getal.", "Typ een getal, bv. " + nf1.format((paramDef(LOG, n) || {}).example || 1) + ".");
+        markInvalid(n);
+        localBad = localBad || n;
+      } else if (!r.empty) params[n] = r.value;
+      // empty: leave out, the database reports what is required
+    });
+    if (localBad) { inputs[localBad].focus(); return; }
+    if (inputs.date && inputs.date.value) params.date = inputs.date.value;
+    if (paramDef(LOG, "feeling") && feelingValue !== null) params.feeling = feelingValue;
+    if (inputs.race) params.race = !!inputs.race.checked;
+    if (inputs.note) {
+      var nv = inputs.note.value.trim();
+      if (nv !== "") params.note = nv;
+    }
+    pending = true;
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Bezig…";
+    Promise.resolve(S.act(LOG.name, { params: params })).then(function (res) {
+      if (res && res.ok) {
+        lastLoggedId = res.id || null;
+        okMsg.textContent = "Run gelogd: " + fmtNum(params.distance_km, unit("distance_km")) + " in " +
+          fmtNum(params.minutes, unit("minutes")) + " (" + fmtDate(params.date) + ").";
+        // reset for the next run, keep the date
+        if (inputs.distance_km) inputs.distance_km.value = "";
+        if (inputs.minutes) inputs.minutes.value = "";
+        if (inputs.note) { inputs.note.value = ""; inputs.noteCount && inputs.noteCount(); }
+        if (inputs.race) inputs.race.checked = false;
+        feelingValue = null; syncFeeling(); updatePace(); syncChips();
+        renderList();
+        var fresh = lastLoggedId && rowEls[lastLoggedId];
+        if (fresh) fresh.li.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } else {
+        var error = (res && res.error) || { message: "Onbekende fout." };
+        var first = placeErrors(error, errs, formErr, {
+          pairNode: pairErr,
+          openMore: function () { var m = document.getElementById("more"); if (m) m.open = true; }
+        });
+        if (first && inputs[first] && inputs[first].focus && inputs[first].tagName === "INPUT") inputs[first].focus();
+      }
+    }, function (e) {
+      showError(formErr, "Er ging iets mis bij het opslaan.", e && e.message ? e.message : null);
+    }).then(function () {
+      pending = false;
+      submitBtn.disabled = false;
+      submitBtn.textContent = (LOG && LOG.label) || "Run loggen";
+    });
+  });
+
+  /* ---------- recent runs ---------- */
+  var listEl = document.getElementById("runs");
+  var listState = document.getElementById("listState");
+  var moreBtn = document.getElementById("moreBtn");
+  var statsEl = document.getElementById("stats");
+  var monthEl = document.getElementById("month");
+  var lastResult = null;
+  var visible = 5;
+  var expanded = {};
+  var rowEls = {};
+  var lastLoggedId = null;
+
+  moreBtn.addEventListener("click", function () { visible += 10; renderList(); });
+
+  function actionState(row, action) {
+    if (!action) return { enabled: false, reason: "Niet beschikbaar." };
+    var a = row.actions && row.actions[action.name];
+    if (!a) return { enabled: false, reason: "Niet beschikbaar." };
+    return a.enabled ? { enabled: true } : { enabled: false, reason: a.reason || action.otherwise || "Nu niet mogelijk." };
+  }
+
+  function buildRow(id) {
+    var r = { id: id };
+    r.li = el("li", { class: "run" });
+    r.main = el("span", { class: "run-main" });
+    r.date = el("span", { class: "run-date" });
+    r.meta = el("span", { class: "run-meta" });
+    var detailId = "det-" + Math.random().toString(36).slice(2);
+    r.sum = el("button", { type: "button", class: "run-sum", "aria-expanded": "false", "aria-controls": detailId }, [r.main, r.date, r.meta]);
+    r.detail = el("div", { class: "run-detail", id: detailId, hidden: true });
+    r.sum.addEventListener("click", function () {
+      expanded[id] = !expanded[id];
+      applyExpanded(r);
+    });
+
+    // feeling edit
+    var fp = paramDef(EDIT, "feeling");
+    if (fp) {
+      r.feelErr = el("p", { class: "err" });
+      r.feelSeg = el("div", { class: "seg small" });
+      (fp.values || []).forEach(function (v) {
+        r.feelSeg.appendChild(el("button", {
+          type: "button", "aria-pressed": "false", "data-v": v, text: v,
+          onclick: function () {
+            var cur = r.data && r.data.values ? r.data.values.feeling : null;
+            saveEdit(r, { feeling: cur === v ? null : v }, r.feelErr, r.feelStatus);
+          }
+        }));
+      });
+      r.feelStatus = el("p", { class: "status", role: "status" });
+      r.detail.appendChild(el("fieldset", { class: "field" }, [
+        el("legend", { text: fp.label || "Gevoel" }), r.feelSeg, r.feelErr, r.feelStatus
+      ]));
+    }
+    // note edit
+    var np = paramDef(EDIT, "note");
+    if (np) {
+      var nid = "note-" + Math.random().toString(36).slice(2);
+      r.noteIn = el("input", { type: "text", id: nid, maxlength: typeof np.maxLength === "number" ? np.maxLength : null, autocomplete: "off", enterkeyhint: "done" });
+      r.noteErr = el("p", { class: "err" });
+      r.noteStatus = el("p", { class: "status", role: "status" });
+      r.noteDirty = false;
+      r.noteIn.addEventListener("input", function () { r.noteDirty = true; r.noteErr.textContent = ""; r.noteStatus.textContent = ""; });
+      r.noteIn.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); r.noteIn.blur(); } });
+      r.noteIn.addEventListener("change", function () {
+        var v = r.noteIn.value.trim();
+        var cur = r.data && r.data.values ? r.data.values.note : null;
+        if ((cur || "") === v) { r.noteDirty = false; return; }
+        saveEdit(r, { note: v === "" ? null : v }, r.noteErr, r.noteStatus, function () { r.noteDirty = false; });
+      });
+      r.detail.appendChild(el("div", { class: "field" }, [el("label", { for: nid, text: np.label || "Notitie" }), r.noteIn, r.noteErr, r.noteStatus]));
+    }
+    // remove with in-page confirmation
+    if (REMOVE) {
+      var rl = REMOVE.label || "Verwijderen";
+      r.rmBtn = el("button", { type: "button", class: "btn btn-danger", text: rl });
+      r.rmReason = el("p", { class: "help" });
+      r.rmErr = el("p", { class: "err", role: "alert" });
+      r.confirmYes = el("button", { type: "button", class: "btn btn-danger solid", text: rl });
+      r.confirmNo = el("button", { type: "button", class: "btn", text: "Annuleren" });
+      r.confirm = el("div", { class: "confirm", hidden: true }, [
+        el("p", { class: "help", text: (REMOVE.description || "Deze run verwijderen") + "? Dit kan niet ongedaan worden." }),
+        el("div", { class: "row-actions" }, [r.confirmYes, r.confirmNo])
+      ]);
+      r.rmBtn.addEventListener("click", function () { r.confirm.hidden = false; r.rmBtn.hidden = true; r.confirmNo.focus(); });
+      r.confirmNo.addEventListener("click", function () { r.confirm.hidden = true; r.rmBtn.hidden = false; r.rmBtn.focus(); });
+      r.confirmYes.addEventListener("click", function () {
+        r.confirmYes.disabled = true;
+        r.rmErr.textContent = "";
+        Promise.resolve(S.act(REMOVE.name, { id: id, params: {} })).then(function (res) {
+          if (!res || !res.ok) {
+            var e = (res && res.error) || {};
+            showError(r.rmErr, e.message || "Verwijderen lukte niet.", e.repair || null);
+            r.confirm.hidden = true; r.rmBtn.hidden = false;
+          }
+        }, function () { showError(r.rmErr, "Verwijderen lukte niet.", null); })
+          .then(function () { r.confirmYes.disabled = false; });
+      });
+      r.detail.appendChild(el("div", {}, [el("div", { class: "row-actions" }, [r.rmBtn]), r.rmReason, r.confirm, r.rmErr]));
+    }
+    r.li.appendChild(r.sum);
+    r.li.appendChild(r.detail);
+    return r;
+  }
+
+  function applyExpanded(r) {
+    var open = !!expanded[r.id];
+    r.sum.setAttribute("aria-expanded", open ? "true" : "false");
+    r.detail.hidden = !open;
+  }
+
+  function saveEdit(r, params, errNode, statusNode, onOk) {
+    errNode.textContent = "";
+    statusNode.textContent = "Opslaan…";
+    Promise.resolve(S.act(EDIT.name, { id: r.id, params: params })).then(function (res) {
+      if (res && res.ok) {
+        statusNode.textContent = "Opgeslagen.";
+        if (onOk) onOk();
+      } else {
+        statusNode.textContent = "";
+        var e = (res && res.error) || { message: "Opslaan lukte niet." };
+        var map = {}; Object.keys(params).forEach(function (k) { map[k] = errNode; });
+        placeErrors(e, map, errNode);
+      }
+    }, function () { statusNode.textContent = ""; showError(errNode, "Opslaan lukte niet.", null); });
+  }
+
+  function updateRow(r, row) {
+    r.data = row;
+    var v = row.values || {};
+    var km = v.distance_km, min = v.minutes;
+    r.main.textContent = fmtNum(km, unit("distance_km")) + " · " + fmtNum(min, unit("minutes"));
+    r.date.textContent = fmtDate(v.date);
+    r.meta.textContent = "";
+    var p = pace(km, min);
+    if (p !== null) r.meta.appendChild(el("span", { text: fmtPace(p) }));
+    if (v.feeling) r.meta.appendChild(el("span", { class: "pill", text: v.feeling }));
+    if (v.race === true) r.meta.appendChild(el("span", { class: "pill race", text: label("race") }));
+    if (v.note) r.meta.appendChild(el("span", { class: "note-snip", text: "“" + v.note + "”" }));
+    r.sum.setAttribute("aria-label", (fmtDate(v.date) + ", " + r.main.textContent + (p !== null ? ", tempo " + fmtPace(p) : "") +
+      (v.feeling ? ", " + label("feeling").toLowerCase() + " " + v.feeling : "") + (v.race === true ? ", " + label("race").toLowerCase() : "") +
+      (v.note ? ", " + label("note").toLowerCase() + ": " + v.note : "")));
+
+    var edit = actionState(row, EDIT);
+    if (r.feelSeg) {
+      Array.prototype.forEach.call(r.feelSeg.children, function (b) {
+        b.setAttribute("aria-pressed", b.getAttribute("data-v") === v.feeling ? "true" : "false");
+        b.disabled = !edit.enabled;
+      });
+      if (!edit.enabled) r.feelStatus.textContent = edit.reason;
+    }
+    if (r.noteIn) {
+      if (document.activeElement !== r.noteIn && !r.noteDirty) r.noteIn.value = v.note == null ? "" : v.note;
+      r.noteIn.disabled = !edit.enabled;
+      if (!edit.enabled) r.noteStatus.textContent = edit.reason;
+    }
+    if (r.rmBtn) {
+      var rm = actionState(row, REMOVE);
+      r.rmBtn.disabled = !rm.enabled;
+      r.rmReason.textContent = rm.enabled ? "" : "Niet te verwijderen: " + rm.reason + ".";
+      r.rmReason.textContent = r.rmReason.textContent.replace(/\.\.$/, ".");
+      if (!rm.enabled) { r.confirm.hidden = true; r.rmBtn.hidden = false; }
+    }
+    r.li.classList.toggle("fresh", row.id === lastLoggedId);
+    applyExpanded(r);
+  }
+
+  function sortedRows() {
+    var rows = (lastResult && Array.isArray(lastResult.rows)) ? lastResult.rows.slice() : [];
+    // the surface orders by date desc; keep that, but be defensive (stable, nulls last)
+    return rows.map(function (r, i) { return { r: r, i: i }; }).sort(function (a, b) {
+      var da = a.r.values && a.r.values.date, db = b.r.values && b.r.values.date;
+      if (da === db) return a.i - b.i;
+      if (da == null) return 1;
+      if (db == null) return -1;
+      return da < db ? 1 : -1;
+    }).map(function (x) { return x.r; });
+  }
+
+  function renderList() {
+    if (!lastResult) return;
+    var rows = sortedRows();
+    var total = typeof lastResult.total === "number" ? lastResult.total : rows.length;
+    renderDistChips(rows);
+
+    if (rows.length === 0) {
+      listState.hidden = false;
+      listState.className = "empty";
+      listState.textContent = "Nog geen runs. Log hierboven je eerste run.";
+    } else listState.hidden = true;
+
+    var shown = rows.slice(0, visible);
+    // keep the row the user is working in, even if it would fall off
+    var active = document.activeElement;
+    Object.keys(rowEls).forEach(function (id) {
+      if (rowEls[id].li.contains(active) && !shown.some(function (r) { return r.id === id; })) {
+        var keep = rows.find(function (r) { return r.id === id; });
+        if (keep) shown.push(keep);
+      }
+    });
+    var keepIds = {};
+    shown.forEach(function (row, idx) {
+      if (row == null || row.id == null) return;
+      keepIds[row.id] = 1;
+      var r = rowEls[row.id] || (rowEls[row.id] = buildRow(row.id));
+      updateRow(r, row);
+      if (listEl.children[idx] !== r.li) listEl.insertBefore(r.li, listEl.children[idx] || null);
+    });
+    Object.keys(rowEls).forEach(function (id) {
+      if (!keepIds[id]) { rowEls[id].li.remove(); if (!rows.some(function (r) { return r.id === id; })) { delete rowEls[id]; delete expanded[id]; } }
+    });
+
+    var rest = rows.length - shown.length;
+    moreBtn.hidden = rest <= 0;
+    if (rest > 0) moreBtn.textContent = "Meer runs tonen (" + rest + " over)";
+    if (total > rows.length && rest <= 0) { moreBtn.hidden = true; }
+
+    renderSummary(total);
+  }
+
+  var monthFmt = new Intl.DateTimeFormat(LOCALE, { month: "long", year: "numeric" });
+  function renderSummary(total) {
+    var sum = lastResult && lastResult.summary;
+    var measures = (C.summary && Array.isArray(C.summary.measures)) ? C.summary.measures : [];
+    statsEl.textContent = "";
+    monthEl.textContent = "";
+    if (!sum || !measures.length || !total) { statsEl.hidden = true; return; }
+    statsEl.hidden = false;
+    measures.slice(0, 3).forEach(function (m) {
+      var val = sum.values ? sum.values[m.name] : null;
+      var txt = m.fn === "count" ? (typeof val === "number" ? nf0.format(val) : "—") : fmtNum(val, m.unit || "");
+      statsEl.appendChild(el("div", { class: "stat" }, [el("div", { class: "v", text: txt }), el("div", { class: "l", text: m.label || m.name })]));
+    });
+    // this month, if the group key looks like YYYY-MM
+    var groups = Array.isArray(sum.groups) ? sum.groups : [];
+    var ym = todayIso().slice(0, 7);
+    var g = groups.find(function (x) { return x && typeof x.key === "string" && x.key.slice(0, 7) === ym; });
+    if (g && g.values) {
+      var parts = measures.filter(function (m) { return g.values[m.name] !== undefined && g.values[m.name] !== null; }).slice(0, 2)
+        .map(function (m) { return m.fn === "count" ? nf0.format(g.values[m.name]) + " " + (m.label || m.name).toLowerCase() : fmtNum(g.values[m.name], m.unit || ""); });
+      var d = parseIso(ym + "-01");
+      if (parts.length) monthEl.textContent = (C.summary.by && C.summary.by.label ? "" : "") + "Deze maand (" + monthFmt.format(d) + "): " + parts.join(" · ");
+    } else if (groups.length || (C.summary && C.summary.by)) {
+      monthEl.textContent = "Deze maand: nog geen runs.";
+    }
+  }
+
+  if (S && typeof S.subscribe === "function") {
+    S.subscribe(function (result) {
+      lastResult = result || { total: 0, rows: [] };
+      renderList();
+    });
+  } else {
+    listState.className = "empty";
+    listState.textContent = "De runs kunnen niet geladen worden.";
+  }
+
+  // if the page stays open past midnight, move the default date along when untouched
+  var initialDay = todayIso();
+  setInterval(function () {
+    var t = todayIso();
+    if (t !== initialDay && inputs.date) {
+      if (inputs.date.value === initialDay && !pending) inputs.date.value = t;
+      initialDay = t;
+      syncDateChips();
+      if (lastResult) renderList();
+    }
+  }, 60000);
+})();
+</script>
+</body>
+</html>
