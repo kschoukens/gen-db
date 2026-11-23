@@ -174,7 +174,7 @@ test('mcp: protocol problems are JSON-RPC errors', () => {
 test('mcp: tools/list_changed fires when a merge adds a surface, not on data writes', () => {
   const { db, server, tools, call } = connect();
   const seen = [];
-  server.onNotification((n) => seen.push(n));
+  server.onMessage((n) => seen.push(n));
 
   call('mijn-runs__Run.log', { params: { date: today, distance_km: 5, minutes: 30 } });
   agentKneePain(db); // schema changes on a branch: not this server's tools
@@ -191,9 +191,11 @@ test('mcp: tools/list_changed fires when a merge adds a surface, not on data wri
   assert.equal(seen.length, 1, 'closed servers stay quiet');
 });
 
-test('mcp: stdio end to end with demo/mcp.js', async () => {
-  const child = spawn(process.execPath, [fileURLToPath(new URL('../demo/mcp.js', import.meta.url)), SAM], { stdio: ['pipe', 'pipe', 'pipe'] });
+/** Spawns demo/mcp.js and speaks newline-delimited JSON-RPC to it. */
+function spawnDemo(actor) {
+  const child = spawn(process.execPath, [fileURLToPath(new URL('../demo/mcp.js', import.meta.url)), actor], { stdio: ['pipe', 'pipe', 'pipe'] });
   const pending = new Map();
+  const received = [];
   let buffer = '';
   child.stdout.on('data', (chunk) => {
     buffer += chunk;
@@ -201,26 +203,171 @@ test('mcp: stdio end to end with demo/mcp.js', async () => {
     while ((at = buffer.indexOf('\n')) !== -1) {
       const message = JSON.parse(buffer.slice(0, at));
       buffer = buffer.slice(at + 1);
-      pending.get(message.id)?.(message);
+      received.push(message);
+      if ('id' in message && !('method' in message)) pending.get(message.id)?.(message);
     }
   });
   let id = 0;
-  const request = (method, params) => new Promise((resolve) => {
-    pending.set(++id, resolve);
-    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
-  });
+  const write = (message) => child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`);
+  return {
+    received,
+    notify: (method, params) => write({ method, params }),
+    send: (method, params) => write({ id: ++id, method, params }),
+    request: (method, params) => new Promise((resolve) => {
+      pending.set(++id, resolve);
+      write({ id, method, params });
+    }),
+    async end() {
+      child.stdin.end();
+      return new Promise((resolve) => child.on('exit', resolve));
+    },
+  };
+}
 
+test('mcp: stdio end to end with demo/mcp.js (2025-11-25)', async () => {
+  const demo = spawnDemo(SAM);
   try {
-    const init = await request('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: CLIENT });
+    const init = await demo.request('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: CLIENT });
     assert.equal(init.result.serverInfo.name, 'gendb-demo');
-    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
-    const list = await request('tools/list', {});
+    demo.notify('notifications/initialized');
+    const list = await demo.request('tools/list', {});
     assert.ok(!list.result.tools.some((t) => t.name === 'alle-runs'), 'served for Sam');
-    const read = await request('tools/call', { name: 'mijn-runs', arguments: {} });
+    const read = await demo.request('tools/call', { name: 'mijn-runs', arguments: {} });
     assert.equal(read.result.structuredContent.total, 3);
   } finally {
-    child.stdin.end();
+    assert.equal(await demo.end(), 0, 'exits when stdin closes');
   }
-  const code = await new Promise((resolve) => child.on('exit', resolve));
-  assert.equal(code, 0, 'exits when stdin closes');
+});
+
+// -- the stateless era: 2026-07-28 ------------------------------------------------------------------
+
+const META = { 'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientCapabilities': {}, 'io.modelcontextprotocol/clientInfo': CLIENT };
+
+/** A server driven only by self-contained 2026-07-28 requests: no initialize. */
+function stateless(actor = KIM, db = createDatabase({ now: () => NOW })) {
+  const server = createMcpServer(db, { actor, name: 'gendb-test', version: '0.0.1' });
+  const sent = [];
+  server.onMessage((m) => sent.push(m));
+  let id = 0;
+  const request = (method, params = {}, meta = META) => server.handle({ jsonrpc: '2.0', id: ++id, method, params: { ...params, _meta: meta } });
+  const call = (name, args, meta) => request('tools/call', { name, arguments: args }, meta).result;
+  return { db, server, sent, request, call, tools: () => request('tools/list').result.tools };
+}
+
+test('mcp 2026-07-28: server/discover, with no handshake before it', () => {
+  const { request } = stateless();
+  const { result } = request('server/discover');
+  assert.deepEqual(result.supportedVersions, ['2026-07-28', '2025-11-25', '2025-06-18']);
+  assert.deepEqual(result.capabilities, { tools: { listChanged: true } });
+  assert.equal(result.resultType, 'complete');
+  assert.deepEqual(result._meta, { 'io.modelcontextprotocol/serverInfo': { name: 'gendb-test', version: '0.0.1' } });
+  assert.ok(result.ttlMs >= 0 && ['public', 'private'].includes(result.cacheScope));
+  assert.match(result.instructions, /user:kim/);
+});
+
+test('mcp 2026-07-28: tools/list is cacheable, per actor', () => {
+  const { request } = stateless();
+  const { result } = request('tools/list');
+  assert.equal(result.resultType, 'complete');
+  assert.deepEqual([result.ttlMs, result.cacheScope], [0, 'private']);
+  assert.equal(result._meta['io.modelcontextprotocol/serverInfo'].name, 'gendb-test');
+  assert.deepEqual(result.tools, connect(KIM).tools(), 'the same tools in both eras');
+  assert.ok(!stateless(SAM).tools().some((t) => t.name === 'alle-runs'));
+});
+
+test('mcp 2026-07-28: a call with provenance from the request\'s own clientInfo', () => {
+  const { db, call } = stateless();
+  const created = call('mijn-runs__Run.log', { params: { date: today, distance_km: 9, minutes: 50 }, intent: 'run van vanochtend' },
+    { ...META, 'io.modelcontextprotocol/clientInfo': { name: 'other-client', version: '2.0' } });
+  assert.equal(created.resultType, 'complete');
+  assert.equal(created.structuredContent.ok, true);
+  assert.equal(call('mijn-runs', {}).structuredContent.total, 12);
+  const [tx] = db.log();
+  assert.deepEqual({ actor: tx.actor, intent: tx.intent, via: tx.via, model: tx.model },
+    { actor: KIM, intent: 'run van vanochtend', via: 'mijn-runs', model: 'mcp:other-client@2.0' });
+
+  const { 'io.modelcontextprotocol/clientInfo': _, ...anonymous } = META;
+  call('mijn-runs__Run.log', { params: { date: today, distance_km: 4, minutes: 25 } }, anonymous);
+  assert.equal(db.log()[0].model, 'mcp:unknown-client', 'clientInfo is optional');
+});
+
+test('mcp 2026-07-28: a refusal carries its repair, writes nothing, and pii stays redacted', () => {
+  const { db, call } = stateless();
+  const before = db.store.seq;
+  const refused = call('mijn-runs__Run.log', { params: { date: today, distance_km: 500, minutes: 3000 } });
+  assert.deepEqual([refused.resultType, refused.isError, refused.structuredContent.error.code], ['complete', true, 'VALIDATION_FAILED']);
+  assert.ok(refused.structuredContent.error.violations.every((v) => v.repair));
+  assert.equal(db.store.seq, before);
+  assert.ok(call('alle-runs', {}).structuredContent.rows.every((r) => r.values.owner === '‹pii›'));
+});
+
+test('mcp 2026-07-28: version, metadata and method errors', () => {
+  const { request, server } = stateless();
+  const unsupported = request('tools/list', {}, { ...META, 'io.modelcontextprotocol/protocolVersion': '1900-01-01' });
+  assert.deepEqual(unsupported.error, {
+    code: -32022, message: 'Unsupported protocol version',
+    data: { supported: ['2026-07-28', '2025-11-25', '2025-06-18'], requested: '1900-01-01' },
+  });
+  const { 'io.modelcontextprotocol/clientCapabilities': _, ...noCapabilities } = META;
+  assert.equal(request('tools/list', {}, noCapabilities).error.code, -32602, 'clientCapabilities is required');
+  assert.equal(request('initialize', { protocolVersion: '2026-07-28' }).error.code, -32601, 'no handshake in this era');
+  assert.equal(request('ping').error.code, -32601, 'ping was removed');
+  assert.equal(request('tools/call', { name: 'nope', arguments: {} }).error.code, -32602);
+  assert.equal(server.handle({ jsonrpc: '2.0', id: 99, method: 'server/discover' }).error.code, -32602, 'discover without _meta is malformed');
+  // A handshake version in _meta does not skip the handshake.
+  assert.equal(request('tools/list', {}, { ...META, 'io.modelcontextprotocol/protocolVersion': '2025-11-25' }).error.code, -32600);
+});
+
+test('mcp 2026-07-28: tools/list_changed arrives on a subscriptions/listen stream', () => {
+  const { db, server, sent, request } = stateless();
+  assert.equal(request('subscriptions/listen', { notifications: { toolsListChanged: true, promptsListChanged: true } }), null, 'the stream stays open');
+  const listenId = 1;
+  assert.deepEqual(sent, [{
+    jsonrpc: '2.0', method: 'notifications/subscriptions/acknowledged',
+    params: { _meta: { 'io.modelcontextprotocol/subscriptionId': listenId }, notifications: { toolsListChanged: true } },
+  }], 'acknowledged first, without what the server cannot honour');
+  request('subscriptions/listen', { notifications: {} }); // a second stream that did not ask for tools
+
+  agentKneePain(db);
+  assert.equal(sent.length, 2, 'nothing for a branch');
+  db.merge(KNEE_BRANCH, { approvedBy: KIM });
+  assert.deepEqual(sent.slice(2), [{
+    jsonrpc: '2.0', method: 'notifications/tools/list_changed', params: { _meta: { 'io.modelcontextprotocol/subscriptionId': listenId } },
+  }], 'only the stream that asked for it, tagged with its id');
+
+  server.handle({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: listenId } });
+  db.evolve({ attrs: { 'Run.shoe': { type: 'string', description: 'Schoen' } }, surfaces: { extra: { description: 'x', from: 'Run', fields: ['Run.shoe'], grants: ['*'] } } }, { actor: KIM });
+  assert.equal(sent.length, 3, 'a cancelled subscription stays quiet');
+
+  server.close();
+  assert.deepEqual(sent.at(-1), {
+    jsonrpc: '2.0', id: 2,
+    result: { resultType: 'complete', _meta: { 'io.modelcontextprotocol/subscriptionId': 2, 'io.modelcontextprotocol/serverInfo': { name: 'gendb-test', version: '0.0.1' } } },
+  }, 'closing answers the open listen request');
+});
+
+test('mcp: both eras on one server', () => {
+  const { server, request: handshakeRequest } = connect();
+  const { result } = server.handle({ jsonrpc: '2.0', id: 'x', method: 'tools/list', params: { _meta: META } });
+  assert.equal(result.resultType, 'complete');
+  assert.equal(handshakeRequest('tools/list').result.resultType, undefined, 'handshake results stay as they were');
+});
+
+test('mcp: stdio end to end with demo/mcp.js (2026-07-28)', async () => {
+  const demo = spawnDemo(KIM);
+  try {
+    const discover = await demo.request('server/discover', { _meta: META });
+    assert.equal(discover.result.supportedVersions[0], '2026-07-28');
+    demo.send('subscriptions/listen', { _meta: META, notifications: { toolsListChanged: true } });
+    const listenId = 2;
+    const list = await demo.request('tools/list', { _meta: META });
+    assert.equal(list.result.cacheScope, 'private');
+    const created = await demo.request('tools/call', { _meta: META, name: 'mijn-runs__Run.log', arguments: { params: { date: '2026-01-02', distance_km: 5, minutes: 30 } } });
+    assert.equal(created.result.structuredContent.ok, true);
+    const ack = demo.received.find((m) => m.method === 'notifications/subscriptions/acknowledged');
+    assert.equal(ack.params._meta['io.modelcontextprotocol/subscriptionId'], listenId);
+    assert.ok(demo.received.indexOf(ack) < demo.received.indexOf(list), 'acknowledged before later responses');
+  } finally {
+    assert.equal(await demo.end(), 0);
+  }
 });

@@ -2,8 +2,9 @@
 //
 //   node demo/mcp.js [actor]        actor defaults to $GENDB_ACTOR, then user:kim
 //
-// Newline-delimited JSON-RPC on stdin and stdout. stdout carries protocol messages only; everything
-// else goes to stderr. The database lives in memory and starts from the scenario on every launch.
+// Newline-delimited JSON-RPC on stdin and stdout, in either protocol era (see src/mcp.js). stdout
+// carries protocol messages only; everything else goes to stderr. The database lives in memory and
+// starts from the scenario on every launch.
 
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -15,7 +16,7 @@ const { version } = JSON.parse(readFileSync(new URL('../package.json', import.me
 
 const server = createMcpServer(createDatabase(), { actor, name: 'gendb-demo', version });
 const send = (message) => process.stdout.write(`${JSON.stringify(message)}\n`);
-server.onNotification(send);
+server.onMessage(send);
 
 const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
 lines.on('line', (line) => {
